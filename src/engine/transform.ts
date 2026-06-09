@@ -44,6 +44,22 @@ const HEADING = /^#{1,6}\s/;
 // it looks. This is what catches a wrapped paragraph copied as a tail fragment,
 // where the first line lost its original full width.
 const CONTINUES_SENTENCE = /^[a-z)\]},]/;
+// A line ending on one of these words cannot be ending a clause — articles,
+// conjunctions, prepositions, auxiliaries, and possessives all demand a
+// continuation. Weak evidence on its own (weight 1): prose lines do sometimes
+// break after them deliberately, but combined with another weak signal it
+// tips a break toward "soft wrap".
+const DANGLING_WORD =
+  /\b(a|an|the|and|or|but|nor|of|to|in|on|at|by|for|with|from|as|into|onto|over|about|after|before|between|during|through|if|that|than|because|while|when|where|so|is|are|was|were|be|been|being|has|have|had|will|would|can|could|should|shall|may|might|must|its|their|his|her|our|your|my)$/i;
+// A finished sentence: terminal punctuation, optionally followed by a closing
+// quote/bracket. Used only as counter-evidence, and only when the line stopped
+// short of the block's right edge — a period that lands exactly at the edge is
+// coincidence and says nothing about the break after it.
+const SENTENCE_END = /[.!?]["')\]]*$/;
+const STARTS_UPPER = /^[A-Z]/;
+
+/** Minimum evidence score before a break is treated as a soft wrap and removed. */
+const JOIN_SCORE = 2;
 
 export function transform(block: Block, c: Classification): string {
   if (c.reflowable && c.confidence >= REFLOW_THRESHOLD) {
@@ -55,11 +71,12 @@ export function transform(block: Block, c: Classification): string {
 
 /**
  * Glue wrapped lines back into a paragraph — but only at boundaries that look
- * like soft wraps. A break is removed when either side shows the sentence ran
- * on past it: the next line starts mid-sentence (lowercase/closing punctuation),
- * or the previous line ran nearly to the block's widest line. Intentional breaks
- * — lead-ins ending in ":"/";", headings, list items, and short lines that both
- * stop short of the edge and start a fresh sentence — are kept.
+ * like soft wraps. The newline itself carries no record of whether it was a
+ * width-forced wrap or a deliberate break, so each boundary is judged by
+ * accumulating evidence from both sides (see shouldJoin): strong signals score
+ * 2, weak ones 1, and the break is only removed when the total reaches
+ * JOIN_SCORE. Lead-ins ending in ":"/";", headings, and list items keep their
+ * break unconditionally.
  */
 function reflowParagraph(lines: string[]): string {
   const trimmed = lines.map(l => l.trim());
@@ -71,19 +88,51 @@ function reflowParagraph(lines: string[]): string {
   for (let i = 1; i < trimmed.length; i++) {
     const prev = trimmed[i - 1];
     const next = trimmed[i];
-    // The break is a soft wrap if the sentence is still in flight across it:
-    // the next line picks up mid-sentence, or the previous line reached the
-    // block's right edge (so it stopped only because it ran out of room).
-    const wrapsOn =
-      CONTINUES_SENTENCE.test(next) ||
-      (prev.length >= WRAP_MIN && prev.length >= width - NEAR_MAX);
-    const prevLooksWrapped =
-      wrapsOn && !ENDS_LEADIN.test(prev) && !HEADING.test(prev);
-    const join =
-      prevLooksWrapped && !LIST_ITEM.test(next) && !HEADING.test(next);
-    out += (join ? ' ' : '\n') + next;
+    out += (shouldJoin(prev, next, width) ? ' ' : '\n') + next;
   }
   return out.replace(/ {2,}/g, ' ');
+}
+
+/** Decide whether the break between prev and next was a soft wrap. */
+function shouldJoin(prev: string, next: string, width: number): boolean {
+  // Hard vetoes — breaks that are deliberate by construction, whatever the
+  // evidence on either side says.
+  if (ENDS_LEADIN.test(prev) || HEADING.test(prev)) return false;
+  if (LIST_ITEM.test(next) || HEADING.test(next)) return false;
+
+  const atRightEdge =
+    prev.length >= WRAP_MIN && prev.length >= width - NEAR_MAX;
+
+  let score = 0;
+  // Strong: the next line picks up mid-sentence.
+  if (CONTINUES_SENTENCE.test(next)) score += 2;
+  // Strong: prev ran to the block's right edge, so it stopped only because it
+  // ran out of room.
+  if (atRightEdge) score += 2;
+  // Weak: prev ends on a word that cannot end a clause.
+  if (DANGLING_WORD.test(prev)) score += 1;
+  // Weak: prev opened a bracket it never closed on its own line.
+  if (hasUnclosedOpener(prev)) score += 1;
+  // Counter-evidence: a finished sentence followed by a fresh capitalized one
+  // reads as two deliberate lines — but only when prev stopped short of the
+  // edge, where the author had room to continue and chose not to.
+  if (!atRightEdge && SENTENCE_END.test(prev) && STARTS_UPPER.test(next)) {
+    score -= 1;
+  }
+
+  return score >= JOIN_SCORE;
+}
+
+/** Whether the line opens a bracket ("(", "[", "{") it never closes. */
+function hasUnclosedOpener(line: string): boolean {
+  let depth = 0;
+  for (const ch of line) {
+    if (ch === '(' || ch === '[' || ch === '{') depth++;
+    // A stray closer (e.g. a tail fragment that starts mid-bracket) doesn't
+    // cancel an opener that comes after it, so clamp at zero.
+    else if (ch === ')' || ch === ']' || ch === '}') depth = Math.max(0, depth - 1);
+  }
+  return depth > 0;
 }
 
 /** Glue each item's wrapped lines together; keep items on their own lines. */
