@@ -22,6 +22,10 @@ const NEAR_MAX = 15;
 // A line ending in one of these is a sentence/clause boundary or a lead-in
 // (e.g. a label ending in ":"), not a mid-word wrap — never join across it.
 const ENDS_INTENTIONAL = /[.!?:;]$/;
+// A Markdown ATX heading line. We never merge a heading into the line below it,
+// nor the line above into a heading. (Consequence: a heading that genuinely
+// wrapped across lines is left as-is rather than rejoined — see note below.)
+const HEADING = /^#{1,6}\s/;
 
 export function transform(block: Block, c: Classification): string {
   if (c.reflowable && c.confidence >= REFLOW_THRESHOLD) {
@@ -50,8 +54,9 @@ function reflowParagraph(lines: string[]): string {
     const prevLooksWrapped =
       prev.length >= WRAP_MIN &&
       prev.length >= width - NEAR_MAX &&
-      !ENDS_INTENTIONAL.test(prev);
-    const join = prevLooksWrapped && !LIST_ITEM.test(next);
+      !ENDS_INTENTIONAL.test(prev) &&
+      !HEADING.test(prev);
+    const join = prevLooksWrapped && !LIST_ITEM.test(next) && !HEADING.test(next);
     out += (join ? ' ' : '\n') + next;
   }
   return out.replace(/ {2,}/g, ' ');

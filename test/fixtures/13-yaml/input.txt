@@ -1,0 +1,6 @@
+name: cleancopy
+version: 0.0.1
+description: clean up copied terminal text
+scripts:
+  build: tsc
+  test: vitest run

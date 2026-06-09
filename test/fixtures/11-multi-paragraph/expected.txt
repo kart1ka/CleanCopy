@@ -1,0 +1,3 @@
+The cleanup engine works in two stages. First it removes the junk that is always safe to remove, like stray spaces and the shared left margin that the terminal adds.
+
+Then it looks at each block in turn and decides whether that block is flowing prose that can be tidied, or something that must be left exactly as it was copied.

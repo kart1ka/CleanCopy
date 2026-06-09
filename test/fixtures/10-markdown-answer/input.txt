@@ -1,0 +1,18 @@
+## How it works
+
+The engine reads the copied text and then decides, paragraph by
+paragraph, what is safe to tidy and what should be left alone.
+
+It handles a few cases:
+
+- wrapped paragraphs, which get joined back together
+- code blocks, which are always preserved
+
+Here is a tiny example:
+
+```ts
+const result = clean(input);
+console.log(result);
+```
+
+That is the whole idea.

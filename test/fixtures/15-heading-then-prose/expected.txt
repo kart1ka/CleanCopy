@@ -1,0 +1,2 @@
+## Understanding How the Cleanup Engine Decides What to Tidy
+The engine first strips the junk that is always safe to remove, and only then does it classify each block to decide what to do.

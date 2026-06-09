@@ -1,0 +1,8 @@
+diff --git a/src/engine/transform.ts b/src/engine/transform.ts
+index 1a2b3c4..5d6e7f8 100644
+--- a/src/engine/transform.ts
++++ b/src/engine/transform.ts
+@@ -22,7 +22,7 @@ export function transform(block, c) {
+-  return lines.join(' ');
++  return reflow(lines);
+ }

@@ -1,0 +1,2 @@
+> This is a quoted passage that was wrapped across two lines in
+> the original terminal output that we copied from.

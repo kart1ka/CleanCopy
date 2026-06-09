@@ -1,0 +1,6 @@
+npm error code ELIFECYCLE
+npm error errno 1
+Error: Cannot find module 'express'
+    at Function.Module._resolveFilename (node:internal/modules/cjs/loader:1145:15)
+    at Function.Module._load (node:internal/modules/cjs/loader:986:27)
+    at Module.require (node:internal/modules/cjs/loader:1233:19)
