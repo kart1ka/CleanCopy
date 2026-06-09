@@ -1,0 +1,8 @@
+Here is how the function works in
+plain words before the code.
+
+const x = compute(a, b);
+const y = x + 1;
+
+That is all there is to it
+really.

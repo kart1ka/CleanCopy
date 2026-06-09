@@ -1,0 +1,5 @@
+Here's the recipe:
+
+  1. Gather a folder of real examples and copy lots of
+  things from your terminal. Save each one.
+  2. Write down what the correct result should look like.

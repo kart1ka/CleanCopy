@@ -1,0 +1,3 @@
+The function reads the file and then
+returns the cleaned result to the
+person who asked for it.

@@ -1,0 +1,31 @@
+{
+  "name": "cleancopy",
+  "version": "0.0.1",
+  "description": "Cleans up text copied from the terminal so it pastes neatly into other apps.",
+  "license": "MIT",
+  "bin": {
+    "cleancopy": "dist/cli/index.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "tsx src/cli/index.ts clean",
+    "dev": "tsx src/cli/index.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0"
+  }
+}
