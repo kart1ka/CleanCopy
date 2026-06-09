@@ -1,0 +1,3 @@
+The engine first removes the junk that is always safe.
+Then it classifies each block and decides what to do with
+it, leaving anything risky exactly as it was copied.

@@ -12,16 +12,24 @@ const LIST_ITEM = /^(\s*)([-*+•]\s+|\d+[.)]\s+)/;
 export const REFLOW_THRESHOLD = 0.6;
 
 // When deciding whether a line break is a soft wrap (remove it) or an
-// intentional break (keep it):
-//   - WRAP_MIN: a line shorter than this is unlikely to be a wrapped line at
-//     normal terminal widths, so we never treat it as a soft wrap.
-//   - NEAR_MAX: a wrapped line runs nearly to the block's widest line; a line
-//     that stops well short of that was almost certainly a deliberate break.
-const WRAP_MIN = 45;
+// intentional break (keep it), the primary signal is uniformity: a wrapped
+// line runs nearly to the block's widest line (NEAR_MAX), because the only
+// reason it stopped was running out of room. A line that falls well short of
+// that edge was almost certainly a deliberate break.
+//   - NEAR_MAX: how far below the block's widest line still counts as "full".
+//   - WRAP_MIN: a low absolute backstop so a block of just a few very short
+//     lines (a couple of words each) is never treated as wrapped prose. It is
+//     deliberately low enough to admit genuine narrow wraps — prose copied
+//     from a split pane or a narrow terminal still reflows.
+const WRAP_MIN = 32;
 const NEAR_MAX = 15;
-// A line ending in one of these is a sentence/clause boundary or a lead-in
-// (e.g. a label ending in ":"), not a mid-word wrap — never join across it.
-const ENDS_INTENTIONAL = /[.!?:;]$/;
+// A line ending in one of these is a lead-in (a label or clause introducing
+// what follows, e.g. "Steps:"), so the break after it is deliberate even when
+// the line runs to the block's edge — never join across it. Sentence-ending
+// "." / "!" / "?" are intentionally NOT here: a sentence that ends right at the
+// wrap column is a coincidental soft wrap and should still join, while one that
+// ends short of the edge is already kept by the uniformity check below.
+const ENDS_LEADIN = /[:;]$/;
 // A Markdown ATX heading line. We never merge a heading into the line below it,
 // nor the line above into a heading. (Consequence: a heading that genuinely
 // wrapped across lines is left as-is rather than rejoined — see note below.)
@@ -38,8 +46,8 @@ export function transform(block: Block, c: Classification): string {
 /**
  * Glue wrapped lines back into a paragraph — but only at boundaries that look
  * like soft wraps. A break is removed only when the line above it ran nearly to
- * the block's widest line and didn't end on sentence/clause punctuation.
- * Intentional breaks (short lines, lead-ins ending in ":", etc.) are kept.
+ * the block's widest line. Intentional breaks (short lines that stop well short
+ * of the edge, and lead-ins ending in ":"/";") are kept.
  */
 function reflowParagraph(lines: string[]): string {
   const trimmed = lines.map((l) => l.trim());
@@ -54,7 +62,7 @@ function reflowParagraph(lines: string[]): string {
     const prevLooksWrapped =
       prev.length >= WRAP_MIN &&
       prev.length >= width - NEAR_MAX &&
-      !ENDS_INTENTIONAL.test(prev) &&
+      !ENDS_LEADIN.test(prev) &&
       !HEADING.test(prev);
     const join = prevLooksWrapped && !LIST_ITEM.test(next) && !HEADING.test(next);
     out += (join ? ' ' : '\n') + next;
