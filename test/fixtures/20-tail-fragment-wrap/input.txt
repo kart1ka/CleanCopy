@@ -1,0 +1,2 @@
+Default it (e.g.
+us-central1) but let them override.
