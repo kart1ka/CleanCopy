@@ -1,8 +1,8 @@
-Here is how the function works in
-plain words before the code.
+Here is how the cleanup function works, described in plain words
+before we get to the code that actually implements it.
 
 const x = compute(a, b);
 const y = x + 1;
 
-That is all there is to it
-really.
+That is really all there is to it, once you have seen the two
+short helper functions above.
