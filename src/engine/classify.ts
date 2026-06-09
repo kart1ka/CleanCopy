@@ -65,8 +65,19 @@ function verbatim(type: Classification['type'], signals: string[]): Classificati
 
 function looksLikeTable(lines: string[]): boolean {
   if (lines.length < 2) return false;
+
+  // Markdown / ASCII pipe tables.
   const piped = lines.filter((l) => (l.match(/\|/g)?.length ?? 0) >= 1).length;
-  return piped >= 2;
+  if (piped >= 2) return true;
+
+  // Whitespace-aligned columns (e.g. `kubectl get`, `ps`, `ls -l`, `docker ps`):
+  // lines with 2+ internal runs of 2+ spaces, i.e. three or more columns.
+  // Normal prose has single spaces between words, so it won't match.
+  const columnar = lines.filter((l) => {
+    const body = l.replace(/^\s+/, ''); // ignore leading indentation
+    return (body.match(/ {2,}/g)?.length ?? 0) >= 2;
+  }).length;
+  return columnar >= 2;
 }
 
 function looksLikeTrace(text: string): boolean {
