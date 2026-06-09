@@ -1,0 +1,7 @@
+The deployment pipeline now runs the full test
+suite before promoting any build to production,
+which caught two regressions this week alone.
+
+Then fetch the file named
+ReallyLongProductName-4.2.1-arm64-installer.dmg
+and double-click it to install.

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { clean } from '../src/engine';
+import { clean, inferWrapWidth } from '../src/engine';
 
 // Fixture-driven golden tests. Each directory under test/fixtures/ holds an
 // input.txt and the expected.txt it should clean to. This corpus IS the
@@ -42,5 +42,19 @@ describe('cleanup engine — properties', () => {
 
   it('empty input stays empty', () => {
     expect(clean('')).toBe('');
+  });
+});
+
+describe('inferWrapWidth — boundaries', () => {
+  const line = (n: number) => 'x'.repeat(n);
+
+  it('needs at least three lines hugging the column', () => {
+    expect(inferWrapWidth([line(78), line(75)].join('\n'))).toBeUndefined();
+    expect(inferWrapWidth([line(78), line(75), line(70)].join('\n'))).toBe(78);
+  });
+
+  it('never establishes a column narrower than a plausible terminal', () => {
+    expect(inferWrapWidth([line(39), line(38), line(37)].join('\n'))).toBeUndefined();
+    expect(inferWrapWidth([line(40), line(39), line(38)].join('\n'))).toBe(40);
   });
 });

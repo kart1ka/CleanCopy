@@ -1,14 +1,15 @@
 import { normalize } from './normalize';
 import { segment } from './segment';
 import { classify } from './classify';
-import { transform } from './transform';
-import type { BlockReport, CleanOptions, CleanResult } from './types';
+import { transform, inferWrapWidth, REFLOW_THRESHOLD } from './transform';
+import type { BlockReport, CleanOptions, CleanResult, JoinReport } from './types';
 
 export * from './types';
 export { normalize, stripCommonMargin } from './normalize';
 export { segment } from './segment';
 export { classify } from './classify';
-export { transform, REFLOW_THRESHOLD } from './transform';
+export { transform, inferWrapWidth, REFLOW_THRESHOLD } from './transform';
+export type { TransformContext } from './transform';
 
 /**
  * Clean a piece of copied text. Pure: text in, text out, no side effects.
@@ -27,13 +28,33 @@ export function clean(input: string): string {
 }
 
 /** Like {@link clean}, but also returns the per-block classifications. */
-export function cleanWithReport(input: string, _options: CleanOptions = {}): CleanResult {
+export function cleanWithReport(input: string, options: CleanOptions = {}): CleanResult {
   const normalized = normalize(input);
   const blocks = segment(normalized);
+  const classifications = blocks.map((block) => classify(block));
 
-  const reports: BlockReport[] = blocks.map((block) => {
-    const classification = classify(block);
-    return { block, classification, output: transform(block, classification) };
+  // The wrap column is a property of the whole paste — every wrapped block in
+  // one copy hugs the same right edge — so it is inferred once and handed to
+  // every block's transform. But only lines that can actually wrap get to
+  // vouch for it: classification runs first, and verbatim blocks are excluded,
+  // because log/code lines often share lengths and would otherwise establish a
+  // spurious column that could join deliberate prose breaks near it.
+  const inferredWidth = inferWrapWidth(
+    blocks
+      .filter(
+        (_, i) =>
+          classifications[i].reflowable &&
+          classifications[i].confidence >= REFLOW_THRESHOLD,
+      )
+      .map((b) => b.text)
+      .join('\n'),
+  );
+
+  const reports: BlockReport[] = blocks.map((block, i) => {
+    const classification = classifications[i];
+    const joins: JoinReport[] | undefined = options.explain ? [] : undefined;
+    const output = transform(block, classification, { docWidth: inferredWidth, joins });
+    return { block, classification, output, joins };
   });
 
   const text = reports
@@ -43,5 +64,5 @@ export function cleanWithReport(input: string, _options: CleanOptions = {}): Cle
     .replace(/[ \t]+$/gm, '') // belt-and-braces trailing trim
     .replace(/^\n+|\n+$/g, ''); // no leading / trailing blank lines
 
-  return { text, reports };
+  return { text, reports, inferredWidth };
 }

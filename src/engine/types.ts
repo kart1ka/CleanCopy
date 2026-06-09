@@ -35,11 +35,29 @@ export interface CleanOptions {
   explain?: boolean;
 }
 
+/**
+ * The verdict on a single line break inside a reflowed block: was it judged a
+ * soft wrap (joined) or an intentional break (kept), and on what evidence.
+ * Only recorded when cleaning runs with `explain` on.
+ */
+export interface JoinReport {
+  /** 0-based index, within the block, of the line *before* the break. */
+  line: number;
+  /** True when the break was removed (the two lines were glued together). */
+  joined: boolean;
+  /** The accumulated evidence score the decision was based on. */
+  score: number;
+  /** The signals that fired, weights included — e.g. "continues-sentence+2". */
+  signals: string[];
+}
+
 export interface BlockReport {
   block: Block;
   classification: Classification;
   /** The cleaned text this block produced. */
   output: string;
+  /** Per-break decisions, present only with `explain` and only for reflowed blocks. */
+  joins?: JoinReport[];
 }
 
 export interface CleanResult {
@@ -47,4 +65,9 @@ export interface CleanResult {
   text: string;
   /** One entry per block, in order. Useful for `--explain`. */
   reports: BlockReport[];
+  /**
+   * The wrap column inferred from the whole paste (the right edge that wrapped
+   * lines hug), or undefined when the paste doesn't establish one.
+   */
+  inferredWidth?: number;
 }

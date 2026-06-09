@@ -42,9 +42,10 @@ async function main(): Promise<void> {
   if (command === 'clean') {
     const explain = args.includes('--explain');
     const input = await readStdin();
-    const { text, reports } = cleanWithReport(input, { explain });
+    const { text, reports, inferredWidth } = cleanWithReport(input, { explain });
 
     if (explain) {
+      process.stderr.write(`inferred wrap column: ${inferredWidth ?? 'none established'}\n`);
       for (const r of reports) {
         const head = r.block.lines[0] ?? '';
         const preview = head.slice(0, 50) + (head.length > 50 ? '…' : '');
@@ -53,6 +54,13 @@ async function main(): Promise<void> {
           `[${c.type}] reflow=${c.reflowable} conf=${c.confidence} ` +
             `(${c.signals.join(', ')})  "${preview}"\n`,
         );
+        for (const j of r.joins ?? []) {
+          const verdict = j.joined ? 'join' : 'keep';
+          const why = j.signals.length > 0 ? j.signals.join(', ') : 'no evidence';
+          process.stderr.write(
+            `    block L${j.line + 1}→L${j.line + 2} ${verdict} score=${j.score} [${why}]\n`,
+          );
+        }
       }
       process.stderr.write('\n');
     }

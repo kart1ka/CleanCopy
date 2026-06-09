@@ -1,4 +1,4 @@
-import type { Block, Classification } from './types';
+import type { Block, Classification, JoinReport } from './types';
 
 // Step 4 of the pipeline: turn a judged block into its cleaned text.
 //
@@ -61,10 +61,61 @@ const STARTS_UPPER = /^[A-Z]/;
 /** Minimum evidence score before a break is treated as a soft wrap and removed. */
 const JOIN_SCORE = 2;
 
-export function transform(block: Block, c: Classification): string {
+// inferWrapWidth only trusts a paste-wide wrap column when the longest line is
+// at least a plausible terminal width (so a block of short uniform lines — a
+// poem, a signature — can never establish one) and at least this many lines
+// hug it (a real wrap column is hit again and again; a lone long line proves
+// nothing).
+const MIN_DOC_WIDTH = 40;
+const MIN_HUGGING_LINES = 3;
+
+/**
+ * Infer, from a whole paste, the column it was wrapped at: the right edge that
+ * wrapped lines hug. In a terminal copy no line can be wider than the window,
+ * so the longest line is a lower bound on the window width — and when several
+ * lines run right up to it, it almost certainly *is* the wrap column. Returns
+ * undefined when the paste doesn't establish one; callers must then fall back
+ * to per-block evidence only.
+ *
+ * Two deliberate one-directional skews keep estimation errors conservative,
+ * and both are invariants — flipping either silently weakens the golden rule:
+ * (a) callers must pass only the text of reflowable (prose/list) blocks, never
+ *     verbatim ones — log/code lines often share lengths and would establish a
+ *     spurious column that could join deliberate breaks near it; and
+ * (b) lengths here keep leading indentation while judgeBreak compares against
+ *     a trimmed prev line, so any mismatch makes docWidth relatively larger,
+ *     which only ever suppresses joins.
+ */
+export function inferWrapWidth(text: string): number | undefined {
+  const lengths = text
+    .split('\n')
+    .map((l) => l.trimEnd().length)
+    .filter((n) => n > 0);
+  if (lengths.length === 0) return undefined;
+
+  const max = Math.max(...lengths);
+  if (max < MIN_DOC_WIDTH) return undefined;
+
+  const hugging = lengths.filter((n) => n >= max - NEAR_MAX).length;
+  return hugging >= MIN_HUGGING_LINES ? max : undefined;
+}
+
+/** Document-level context handed down from clean() to each block's transform. */
+export interface TransformContext {
+  /** The paste-wide wrap column from {@link inferWrapWidth}, when established. */
+  docWidth?: number;
+  /** When provided, every break decision is recorded here (for `--explain`). */
+  joins?: JoinReport[];
+}
+
+export function transform(
+  block: Block,
+  c: Classification,
+  ctx: TransformContext = {},
+): string {
   if (c.reflowable && c.confidence >= REFLOW_THRESHOLD) {
-    if (c.type === 'list') return reflowList(block.lines);
-    if (c.type === 'prose') return reflowParagraph(block.lines);
+    if (c.type === 'list') return reflowList(block.lines, ctx);
+    if (c.type === 'prose') return reflowParagraph(block.lines, ctx);
   }
   return block.lines.join('\n');
 }
@@ -78,7 +129,7 @@ export function transform(block: Block, c: Classification): string {
  * JOIN_SCORE. Lead-ins ending in ":"/";", headings, and list items keep their
  * break unconditionally.
  */
-function reflowParagraph(lines: string[]): string {
+function reflowParagraph(lines: string[], ctx: TransformContext = {}): string {
   const trimmed = lines.map(l => l.trim());
   if (trimmed.length === 1) return trimmed[0];
 
@@ -88,39 +139,64 @@ function reflowParagraph(lines: string[]): string {
   for (let i = 1; i < trimmed.length; i++) {
     const prev = trimmed[i - 1];
     const next = trimmed[i];
-    out += (shouldJoin(prev, next, width) ? ' ' : '\n') + next;
+    const verdict = judgeBreak(prev, next, width, ctx.docWidth);
+    ctx.joins?.push({ line: i - 1, ...verdict });
+    out += (verdict.joined ? ' ' : '\n') + next;
   }
   return out.replace(/ {2,}/g, ' ');
 }
 
 /** Decide whether the break between prev and next was a soft wrap. */
-function shouldJoin(prev: string, next: string, width: number): boolean {
+function judgeBreak(
+  prev: string,
+  next: string,
+  width: number,
+  docWidth?: number,
+): Omit<JoinReport, 'line'> {
   // Hard vetoes — breaks that are deliberate by construction, whatever the
   // evidence on either side says.
-  if (ENDS_LEADIN.test(prev) || HEADING.test(prev)) return false;
-  if (LIST_ITEM.test(next) || HEADING.test(next)) return false;
+  if (ENDS_LEADIN.test(prev)) return { joined: false, score: 0, signals: ['veto:lead-in'] };
+  if (HEADING.test(prev)) return { joined: false, score: 0, signals: ['veto:heading-above'] };
+  if (HEADING.test(next)) return { joined: false, score: 0, signals: ['veto:heading-below'] };
+  if (LIST_ITEM.test(next)) return { joined: false, score: 0, signals: ['veto:list-item'] };
 
   const atRightEdge =
     prev.length >= WRAP_MIN && prev.length >= width - NEAR_MAX;
 
   let score = 0;
+  const signals: string[] = [];
+  const add = (n: number, name: string) => {
+    score += n;
+    signals.push(`${name}${n > 0 ? '+' : ''}${n}`);
+  };
+
   // Strong: the next line picks up mid-sentence.
-  if (CONTINUES_SENTENCE.test(next)) score += 2;
+  if (CONTINUES_SENTENCE.test(next)) add(2, 'continues-sentence');
   // Strong: prev ran to the block's right edge, so it stopped only because it
   // ran out of room.
-  if (atRightEdge) score += 2;
+  if (atRightEdge) add(2, 'at-right-edge');
+  // Strong: the next line's first word would not have fit on prev within the
+  // paste-wide wrap column — the break sits exactly where a forced wrap would.
+  // (This is the wrap invariant: a wrapped line plus the word that follows it
+  // always overflows the column; an author breaking early usually doesn't.)
+  if (docWidth !== undefined) {
+    const firstWord = next.split(/\s+/, 1)[0] ?? '';
+    if (firstWord.length > 0 && prev.length + 1 + firstWord.length > docWidth) {
+      add(2, 'next-word-cannot-fit');
+    }
+  }
   // Weak: prev ends on a word that cannot end a clause.
-  if (DANGLING_WORD.test(prev)) score += 1;
+  if (DANGLING_WORD.test(prev)) add(1, 'dangling-word');
   // Weak: prev opened a bracket it never closed on its own line.
-  if (hasUnclosedOpener(prev)) score += 1;
+  if (hasUnclosedOpener(prev)) add(1, 'unclosed-bracket');
   // Counter-evidence: a finished sentence followed by a fresh capitalized one
   // reads as two deliberate lines — but only when prev stopped short of the
   // edge, where the author had room to continue and chose not to.
   if (!atRightEdge && SENTENCE_END.test(prev) && STARTS_UPPER.test(next)) {
-    score -= 1;
+    add(-1, 'sentence-end');
   }
 
-  return score >= JOIN_SCORE;
+  return { joined: score >= JOIN_SCORE, score, signals };
 }
 
 /** Whether the line opens a bracket ("(", "[", "{") it never closes. */
@@ -135,19 +211,34 @@ function hasUnclosedOpener(line: string): boolean {
   return depth > 0;
 }
 
-/** Glue each item's wrapped lines together; keep items on their own lines. */
-function reflowList(lines: string[]): string {
-  const items: string[] = [];
+/**
+ * Glue each item's wrapped lines together; keep items on their own lines.
+ * A continuation line is only glued when the break before it scores as a soft
+ * wrap (same evidence as paragraphs) — a deliberate sub-line, e.g. one that
+ * follows an item ending in ":", stays on its own line.
+ */
+function reflowList(lines: string[], ctx: TransformContext = {}): string {
+  const width = Math.max(...lines.map(l => l.trim().length));
+  const out: string[] = [];
 
-  for (const line of lines) {
-    if (LIST_ITEM.test(line)) {
-      items.push(line.trimStart()); // new item — drop its leading indent
-    } else if (items.length > 0) {
-      items[items.length - 1] += ' ' + line.trim(); // wrapped continuation
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (LIST_ITEM.test(line) || out.length === 0) {
+      out.push(line.trimStart()); // new item — drop its leading indent
+      continue;
+    }
+    const prev = lines[i - 1].trim();
+    const next = line.trim();
+    const verdict = judgeBreak(prev, next, width, ctx.docWidth);
+    ctx.joins?.push({ line: i - 1, ...verdict });
+    if (verdict.joined) {
+      out[out.length - 1] += ' ' + next; // wrapped continuation
     } else {
-      items.push(line.trim());
+      out.push(line); // deliberate sub-line — keep the break and its indent
     }
   }
 
-  return items.map(i => i.replace(/ {2,}/g, ' ').trim()).join('\n');
+  // Collapse runs of spaces, but only after the first non-space character so a
+  // kept sub-line's leading indent survives.
+  return out.map(i => i.replace(/(\S) {2,}/g, '$1 ').trimEnd()).join('\n');
 }
