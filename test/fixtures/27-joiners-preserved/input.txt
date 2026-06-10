@@ -1,0 +1,3 @@
+The deploy script was written by the 👩‍💻 on our team
+and the Persian word می‌خواهم in the test corpus must
+survive every cleanup pass without losing a character.

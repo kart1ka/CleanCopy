@@ -7,8 +7,12 @@
 // the invisible characters literally into the source is fragile and easy to
 // corrupt.
 
-// Zero-width / invisible characters: ZWSP, ZWNJ, ZWJ, word-joiner, BOM.
-const ZERO_WIDTH = new RegExp('[\\u200B\\u200C\\u200D\\u2060\\uFEFF]', 'g');
+// Zero-width / invisible characters: ZWSP, word-joiner, BOM. ZWNJ (‌) and
+// ZWJ (‍) are deliberately NOT here: they look like junk but carry
+// meaning — ZWJ composes emoji ("👩‍💻" is woman + ZWJ + laptop) and ZWNJ is the
+// half-space that Persian/Farsi spelling requires. Stripping them corrupts the
+// user's text.
+const ZERO_WIDTH = new RegExp('[\\u200B\\u2060\\uFEFF]', 'g');
 // Unusual space characters: NBSP, Ogham space, en/em spaces, narrow & medium
 // NBSP, ideographic space.
 const EXOTIC_SPACES = new RegExp('[\\u00A0\\u1680\\u2000-\\u200A\\u202F\\u205F\\u3000]', 'g');
