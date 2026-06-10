@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { execFileSync, spawn } from 'child_process';
 import * as fs from 'fs';
 import {
   ensureStateDir,
@@ -11,29 +11,74 @@ import {
 // `cleancopy start` daemonizes `cleancopy run`: a detached copy of this CLI
 // with stdout/stderr redirected to the event log, tracked by a pid file in
 // ~/.cleancopy. The log receives event lines only — never clipboard text.
+//
+// The pid file records the pid AND the process start time. Pids are recycled:
+// after a crash leaves a stale file, the bare pid can belong to a completely
+// unrelated process, and acting on it would let `cleancopy stop` SIGKILL
+// something that was never ours. Same pid + same start time is, in practice,
+// the same process.
 
-export function readPid(): number | null {
+export interface PidRecord {
+  pid: number;
+  /** `ps -o lstart` of the daemon when it wrote the file ('' if ps failed). */
+  startedAt: string;
+}
+
+/** When the process started, per ps(1); null when the pid is gone. */
+export function processStartedAt(pid: number): string | null {
   try {
-    const pid = parseInt(fs.readFileSync(pidFilePath(), 'utf8').trim(), 10);
-    return Number.isInteger(pid) && pid > 0 ? pid : null;
+    const out = execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], {
+      encoding: 'utf8',
+    }).trim();
+    return out || null;
   } catch {
     return null;
   }
+}
+
+export function readPidRecord(): PidRecord | null {
+  try {
+    const raw: unknown = JSON.parse(fs.readFileSync(pidFilePath(), 'utf8'));
+    if (typeof raw !== 'object' || raw === null) return null;
+    const record = raw as Record<string, unknown>;
+    if (!Number.isInteger(record.pid) || (record.pid as number) <= 0) return null;
+    if (typeof record.startedAt !== 'string') return null;
+    return { pid: record.pid as number, startedAt: record.startedAt };
+  } catch {
+    return null;
+  }
+}
+
+export function writePidFile(): void {
+  const record: PidRecord = {
+    pid: process.pid,
+    startedAt: processStartedAt(process.pid) ?? '',
+  };
+  fs.writeFileSync(pidFilePath(), JSON.stringify(record) + '\n');
 }
 
 export function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
-  } catch (err) {
-    return (err as NodeJS.ErrnoException).code === 'EPERM';
+  } catch {
+    // ESRCH: no such process. EPERM: someone else's process — which cannot
+    // be our daemon either, since the daemon runs as this same user.
+    return false;
   }
 }
 
-function runningPid(): number | null {
-  const pid = readPid();
-  if (pid === null) return null;
-  if (isAlive(pid)) return pid;
+/** Whether the record still points at the process that wrote it. */
+function isOurs(record: PidRecord): boolean {
+  if (!isAlive(record.pid)) return false;
+  // '' means ps failed when the file was written; fall back to liveness alone.
+  return record.startedAt === '' || processStartedAt(record.pid) === record.startedAt;
+}
+
+export function runningPid(): number | null {
+  const record = readPidRecord();
+  if (record === null) return null;
+  if (isOurs(record)) return record.pid;
   fs.rmSync(pidFilePath(), { force: true }); // stale pid file
   return null;
 }
@@ -52,7 +97,7 @@ export function runForeground(): void {
 
   const helperPath = resolveHelperBinary();
   ensureStateDir();
-  fs.writeFileSync(pidFilePath(), `${process.pid}\n`);
+  writePidFile();
 
   const log = (line: string) =>
     process.stdout.write(`${new Date().toISOString()} ${line}\n`);
@@ -118,11 +163,16 @@ export async function start(): Promise<void> {
 
 export async function stop(): Promise<void> {
   const pid = runningPid();
-  if (pid === null) {
+  const record = readPidRecord();
+  if (pid === null || record === null) {
     process.stdout.write('cleancopy is not running\n');
     return;
   }
-  process.kill(pid, 'SIGTERM');
+  try {
+    process.kill(pid, 'SIGTERM');
+  } catch {
+    // It exited between the liveness check and the signal.
+  }
   for (let i = 0; i < 30; i++) {
     await sleep(100);
     if (!isAlive(pid)) {
@@ -131,8 +181,19 @@ export async function stop(): Promise<void> {
       return;
     }
   }
+  // Re-verify identity before the force kill: SIGKILL must never reach a
+  // process that merely inherited the daemon's old pid.
+  if (record.startedAt !== '' && processStartedAt(pid) !== record.startedAt) {
+    fs.rmSync(pidFilePath(), { force: true });
+    process.stdout.write('cleancopy stopped\n');
+    return;
+  }
   process.stderr.write(`cleancopy (pid ${pid}) did not exit after 3s; sending SIGKILL\n`);
-  process.kill(pid, 'SIGKILL');
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch {
+    // Already gone.
+  }
   fs.rmSync(pidFilePath(), { force: true });
 }
 
