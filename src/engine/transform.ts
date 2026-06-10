@@ -1,3 +1,4 @@
+import { stripCommonMargin } from './normalize';
 import type { Block, Classification, JoinReport } from './types';
 
 // Step 4 of the pipeline: turn a judged block into its cleaned text.
@@ -220,16 +221,23 @@ function hasUnclosedOpener(line: string): boolean {
  * follows an item ending in ":", stays on its own line.
  */
 function reflowList(lines: string[], ctx: TransformContext = {}): string {
-  const width = lines.reduce((m, l) => Math.max(m, l.trim().length), 0);
+  // A list block can sit indented as a whole, relative to the prose around it
+  // (the global margin strip in normalize only removes indentation shared by
+  // the *entire* paste) — that block-wide margin is rendering, and goes. But
+  // indent beyond it is structure: it is what nests a child item under its
+  // parent. So strip the block's own common margin, then keep every line's
+  // remaining indent.
+  const block = stripCommonMargin(lines.join('\n')).split('\n');
+  const width = block.reduce((m, l) => Math.max(m, l.trim().length), 0);
   const out: string[] = [];
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+  for (let i = 0; i < block.length; i++) {
+    const line = block[i];
     if (LIST_ITEM.test(line) || out.length === 0) {
-      out.push(line.trimStart()); // new item — drop its leading indent
+      out.push(line); // new item — keep its nesting indent
       continue;
     }
-    const prev = lines[i - 1].trim();
+    const prev = block[i - 1].trim();
     const next = line.trim();
     const verdict = judgeBreak(prev, next, width, ctx.docWidth);
     ctx.joins?.push({ line: i - 1, ...verdict });
