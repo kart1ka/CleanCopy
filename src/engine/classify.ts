@@ -14,8 +14,34 @@ import type { Block, Classification } from './types';
 /** A line that starts a bullet or numbered list item. */
 export const LIST_ITEM = /^\s*([-*+•]\s+|\d+[.)]\s+)/;
 
-const CODE_KEYWORD =
-  /^\s*(const|let|var|def|func|function|class|import|export|return|if|else|for|while|switch|public|private|package|using)\b/;
+// Lines that use a programming keyword the way code does. A bare keyword at
+// the start of a line is deliberately NOT a tell when it is also an ordinary
+// English word: a wrapped paragraph puts a random word at the start of every
+// line, and "for diagnosing them in seconds" must not freeze a block
+// (fixture 25). So English-colliding keywords only count together with the
+// syntax real code puts after them; keywords that aren't English words
+// (def, elif, fn, impl …) stay standalone tells. (Statements this misses —
+// e.g. Python's bare `import os` — usually sit next to lines the other guards
+// catch; grow the list from real fixtures.)
+const CODE_STATEMENT = new RegExp(
+  '^\\s*(?:' +
+    [
+      /(?:def|elif|fn|func|impl)\b/, // keywords that are not English words
+      /(?:if|for|while|switch)\s*\(/, // if (cond) {
+      /(?:if|while|for|with|try|except|finally|else)\b.*:\s*$/, // if cond:
+      /import\s+[\w.]+(?:\s+as\s+\w+)?\s*$/, // import os.path as p
+      /from\s+[\w.]+\s+import\s/, // from os import path
+      /(?:const|let|var)\s+[\w$]+\s*=/, // let total =
+      /function\s+[\w$]+\s*\(/, // function main(
+      /class\s+[\w$]+\s*(?:[:({]|\s(?:extends|implements)\s)/, // class Foo:
+      /(?:import|export)\b.*(?:\{|\bfrom\s*['"])/, // import { x } from 'y'
+      /export\s+default\b/,
+      /(?:public|private|protected)\s+(?:static|final|abstract|void|class)\b/,
+    ]
+      .map((r) => r.source)
+      .join('|') +
+    ')',
+);
 const CODE_SYMBOLS = /[{}\[\]<>;=|\\`]/g;
 
 export function classify(block: Block): Classification {
@@ -105,7 +131,7 @@ function looksLikeCode(lines: string[], text: string): boolean {
   if (lines.some((l) => /[;{]\s*$/.test(l))) return true; // line ends in ; or {
   if (lines.some((l) => /^\s*[)}\]]+;?\s*$/.test(l))) return true; // closing-bracket line
   if (/=>|::|->|&&|\|\||===|!==/.test(text)) return true; // operators
-  if (lines.some((l) => CODE_KEYWORD.test(l))) return true; // language keywords
+  if (lines.some((l) => CODE_STATEMENT.test(l))) return true; // keyword used as code
   if (lines.some((l) => /^\s*[$#%>]\s+\S/.test(l))) return true; // shell / REPL prompt
   const symbols = text.match(CODE_SYMBOLS)?.length ?? 0;
   const nonSpace = text.replace(/\s/g, '').length || 1;
