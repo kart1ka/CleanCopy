@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { clean, inferWrapWidth } from '../src/engine';
+import { clean, inferWrapWidth, stripCommonMargin } from '../src/engine';
 
 // Fixture-driven golden tests. Each directory under test/fixtures/ holds an
 // input.txt and the expected.txt it should clean to. This corpus IS the
@@ -47,6 +47,29 @@ describe('cleanup engine — properties', () => {
   it('survives a block of 200k lines (spread-into-Math.max overflows the stack)', () => {
     const huge = Array.from({ length: 200_000 }, () => 'aa').join('\n');
     expect(() => clean(huge)).not.toThrow();
+  });
+});
+
+describe('stripCommonMargin — literal prefix, never a character count', () => {
+  it('strips a shared space margin', () => {
+    expect(stripCommonMargin('  a\n  b')).toBe('a\nb');
+  });
+
+  it('strips a shared tab margin', () => {
+    expect(stripCommonMargin('\ta\n\tb')).toBe('a\nb');
+  });
+
+  it('keeps relative indentation beyond the margin', () => {
+    expect(stripCommonMargin('  a\n    b')).toBe('a\n  b');
+  });
+
+  it('strips nothing when one line is tab-indented and another space-indented', () => {
+    const makefile = '    build:\n\tgo build ./...';
+    expect(stripCommonMargin(makefile)).toBe(makefile);
+  });
+
+  it('keeps a tab that sits beyond a shared space margin (Makefile recipe)', () => {
+    expect(stripCommonMargin('  build:\n  \tgo build ./...')).toBe('build:\n\tgo build ./...');
   });
 });
 

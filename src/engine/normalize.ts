@@ -46,18 +46,32 @@ export function normalize(input: string): string {
   return text;
 }
 
-/** Remove the largest run of leading whitespace common to all non-blank lines. */
+/**
+ * Remove the leading whitespace shared by all non-blank lines. The margin is
+ * the longest common *literal* prefix, not a character count: counting would
+ * treat a tab and a space as interchangeable and slice different whitespace
+ * off different lines — turning a Makefile's required recipe tab into nothing
+ * and breaking relative indentation. Mixed margins (one line tab-indented,
+ * another space-indented) share no prefix, so nothing is stripped.
+ */
 export function stripCommonMargin(text: string): string {
   const lines = text.split('\n');
 
-  let min = Infinity;
+  let margin: string | null = null;
   for (const line of lines) {
     if (line.trim() === '') continue; // blank lines don't count
-    const indent = line.match(/^[ \t]*/)?.[0].length ?? 0;
-    if (indent < min) min = indent;
-    if (min === 0) break;
+    const indent = line.match(/^[ \t]*/)?.[0] ?? '';
+    if (margin === null) {
+      margin = indent;
+    } else {
+      let i = 0;
+      while (i < margin.length && i < indent.length && margin[i] === indent[i]) i++;
+      margin = margin.slice(0, i);
+    }
+    if (margin === '') return text;
   }
 
-  if (!Number.isFinite(min) || min === 0) return text;
-  return lines.map((line) => (line.trim() === '' ? line : line.slice(min))).join('\n');
+  if (!margin) return text;
+  const width = margin.length;
+  return lines.map((line) => (line.trim() === '' ? line : line.slice(width))).join('\n');
 }
