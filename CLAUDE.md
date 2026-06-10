@@ -68,3 +68,27 @@ CleanCopy reads everything that hits the clipboard, so trust is the whole game: 
 
 - **v1:** macOS only; automatic cleanup on every terminal copy; npm global install; no menu-bar app or window; no cloud; no clipboard history.
 - **Planned later (do not build yet unless asked):** a Raycast-style notification HUD shown when a copy is cleaned; a keyboard shortcut to paste the *original* text when the user dislikes the cleaned version (an undo); a configurable "copy + clean" shortcut as an alternative to auto-clean-on-copy; user-configurable behavior.
+
+## Prior art & library research (2026-06-09)
+
+A web search was done to decide build-vs-reuse. **Conclusion: no off-the-shelf library does the whole job** (clean terminal-copied text *and* unwrap only the prose while preserving code/tables). The few purpose-built tools (Clean Clode, Terminal Text Cleaner) are closed/GPL web apps, not reusable libraries. **Chosen approach: a hybrid** — keep our own engine + classifier for the hard part, reuse small libs for the boring parts, and use the Raycast extension as a reference to make our classifier more complete.
+
+### The hard part (structure-aware unwrap) — reference, not a dependency
+- **Raycast "Wrap/Unwrap" extension `lib/` — the closest match.** Pure dependency-free **TypeScript**, **MIT** licensed, offline. Its `classify.ts` is a real block classifier (prose vs fenced/indented code, pipe tables, bullet/ordered/task lists, nested blockquotes, headings, HR, HTML blocks, link-ref defs, hard breaks) and `unwrap.ts` reflows only the prose groups. Source: `https://github.com/raycast/extensions/tree/main/extensions/wrap-unwrap/src/lib` (files: `classify.ts`, `unwrap.ts`, `inline.ts`, `regex.ts`, `wrap.ts`; **skip `pipeline.ts`** — it's the only Raycast/clipboard-coupled file). Caveats: it is **Markdown-aware, not terminal-aware**, and uses CommonMark's "4-space indent = code" rule — so our dedent (shared-margin strip) MUST run *before* it, or margin-indented prose gets misread as code. It does **not** do ANSI/zero-width/unicode cleanup.
+- **Fallbacks / benchmarks (not the engine):** Prettier with `proseWrap: "never"` and Python `mdformat --wrap=no` both genuinely *unwrap* prose while preserving code/tables — but they're full Markdown *reformatters* (rewrite bullets, emphasis, re-fence indented code, assume valid Markdown) and heavy. Useful to compare our output against. **Watch out:** most "text wrap" packages (word-wrap, linewrap, muesli/reflow, Flowmark, fmt/fold) only *add* line breaks — they wrap, they don't unwrap. We need unwrap.
+
+### The boring parts — small libraries we could compose (instead of hand-rolling)
+- **`strip-ansi`** (chalk, MIT) — robust ANSI/color-code removal; better than our hand-written regex in `normalize.ts`. (Node 16+ also has built-in `util.stripVTControlCharacters`.)
+- **`strip-indent`** (sindresorhus, MIT) — removes the common leading margin while preserving relative indentation. This is exactly what our `stripCommonMargin` does; could be swapped in.
+- **Zero-width / unusual-unicode-space cleanup** — no well-maintained library worth adopting; keep our own ~5-line regex (we want to control this anyway).
+- **Trailing-whitespace trim / blank-line collapse** — trivial regex, not worth a dependency.
+- **Supply-chain note:** strip-ansi / strip-indent were caught in the Sept-2025 npm phishing incident (fixed fast). If adopted, pin exact versions + keep the lockfile + run `npm audit`.
+
+### Existing end-user apps (competitive reference only — none auto-clean terminal copies with structure preservation)
+- **TextSoap** (paid, macOS) — *does* turn hard-wrapped text into flowing paragraphs + NBSP/space cleanup, but it's regex-cleaner based, **not** code-vs-prose aware (risks mangling code).
+- **Pure Paste** (Sindre Sorhus) — strips invisible chars / rich text on paste; **no unwrap**. Good inspiration for the invisible-char cleanup.
+- **WordService** (DEVONtechnologies, free) — has a paragraph-reformat command, not structure-aware.
+- Takeaway: our specific niche — *automatic, on every terminal copy, structure-aware* — is not covered by any existing app, so building is justified.
+
+### To resume this thread
+A general-purpose research agent (id `a5fbed5dafd84906a`) holds the full findings and can be continued via SendMessage if deeper digging is needed.
