@@ -62,7 +62,15 @@ export function startWatcher(options: WatcherOptions): Watcher {
     }
     if (message.type !== 'clipboard') return;
 
-    const decision = decide(message, extraTerminals);
+    // An engine bug must never take the whole daemon down: on any throw the
+    // copy is simply left as it was (the golden rule, applied to crashes).
+    let decision: ReturnType<typeof decide>;
+    try {
+      decision = decide(message, extraTerminals);
+    } catch (err) {
+      log(`engine error, left copy unchanged (${(err as Error).message})`);
+      return;
+    }
     if (decision.action === 'write') {
       sendToHelper({ type: 'write', text: decision.text });
       log(`cleaned copy from ${message.appName || message.bundleId} (${decision.summary})`);

@@ -153,7 +153,9 @@ function looksLikeProse(text: string): boolean {
  */
 function proseConfidence(lines: string[]): number {
   if (lines.length < 2) return 0.6;
-  const max = Math.max(...lines.map((l) => l.length));
+  // reduce, not Math.max(...spread): a block can run to 100k+ lines, and that
+  // many spread arguments overflow the call stack.
+  const max = lines.reduce((m, l) => Math.max(m, l.length), 0);
   const inner = lines.slice(0, -1);
   const tight = inner.every((l) => l.length >= max - 15);
   const noStops = inner.every((l) => !/[.!?]$/.test(l.trim()));

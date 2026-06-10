@@ -93,7 +93,9 @@ export function inferWrapWidth(text: string): number | undefined {
     .filter((n) => n > 0);
   if (lengths.length === 0) return undefined;
 
-  const max = Math.max(...lengths);
+  // reduce, not Math.max(...spread): a paste can run to 100k+ lines, and that
+  // many spread arguments overflow the call stack (same in the reflows below).
+  const max = lengths.reduce((m, n) => Math.max(m, n), 0);
   if (max < MIN_DOC_WIDTH) return undefined;
 
   const hugging = lengths.filter((n) => n >= max - NEAR_MAX).length;
@@ -133,7 +135,7 @@ function reflowParagraph(lines: string[], ctx: TransformContext = {}): string {
   const trimmed = lines.map(l => l.trim());
   if (trimmed.length === 1) return trimmed[0];
 
-  const width = Math.max(...trimmed.map(l => l.length));
+  const width = trimmed.reduce((m, l) => Math.max(m, l.length), 0);
 
   let out = trimmed[0];
   for (let i = 1; i < trimmed.length; i++) {
@@ -218,7 +220,7 @@ function hasUnclosedOpener(line: string): boolean {
  * follows an item ending in ":", stays on its own line.
  */
 function reflowList(lines: string[], ctx: TransformContext = {}): string {
-  const width = Math.max(...lines.map(l => l.trim().length));
+  const width = lines.reduce((m, l) => Math.max(m, l.trim().length), 0);
   const out: string[] = [];
 
   for (let i = 0; i < lines.length; i++) {

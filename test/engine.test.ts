@@ -43,6 +43,11 @@ describe('cleanup engine — properties', () => {
   it('empty input stays empty', () => {
     expect(clean('')).toBe('');
   });
+
+  it('survives a block of 200k lines (spread-into-Math.max overflows the stack)', () => {
+    const huge = Array.from({ length: 200_000 }, () => 'aa').join('\n');
+    expect(() => clean(huge)).not.toThrow();
+  });
 });
 
 describe('inferWrapWidth — boundaries', () => {
