@@ -8,7 +8,7 @@ CleanCopy cleans up text copied from a terminal so it pastes neatly into other a
 
 ## Status
 
-Early scaffold. On disk right now: `package.json`, `tsconfig.json`, this file, the README, and the cleanup engine with its fixture tests (`src/engine`, `test/`). The build order is: (1) the cleanup engine, (2) a fixture test corpus, (3) a `cleancopy clean` CLI, and only then (4+) the live clipboard watcher and the native macOS layer. Sections below describe both what exists and the agreed target architecture; treat anything not yet on disk as the plan to build toward, not as existing code.
+The core product works end to end: (1) the cleanup engine, (2) the fixture test corpus, (3) the `cleancopy clean` CLI, and (4) the live clipboard watcher — the Swift helper (`helper/`), the Node orchestration (`src/watcher/`), and the `start`/`stop`/`status`/`run` commands — are all on disk and tested. Not yet built: npm publish with a prebuilt universal helper binary, launchd autostart, and everything under "Planned later" below.
 
 ## Commands
 
@@ -20,6 +20,8 @@ Early scaffold. On disk right now: `package.json`, `tsconfig.json`, this file, t
 - `npm run clean` — run the CLI in dev via tsx; reads stdin, prints cleaned text to stdout. Typical use: `pbpaste | npm run -s clean | pbcopy`, or `npm run -s clean -- --explain < test/fixtures/<case>/input.txt`.
 - `npm run typecheck` — type-check without emitting.
 - `npm run build` — compile TypeScript to `dist/` (CommonJS); the published `cleancopy` bin points at `dist/cli/index.js`.
+- `npm run build:helper` — compile the Swift clipboard helper (release, native arch) into `helper/bin/cleancopy-helper`. Needs Xcode CLT. The helper integration tests skip themselves when this hasn't been run. `build:helper:universal` builds the arm64+x86_64 fat binary for publishing (`prepublishOnly` runs it).
+- `cleancopy start` / `stop` / `status` — manage the background watcher daemon (pid file + event log live in `~/.cleancopy/`, overridable via `CLEANCOPY_STATE_DIR`). `cleancopy run` runs it in the foreground with events on stdout — use this when debugging. In dev: `npm run dev -- start` etc. `CLEANCOPY_PASTEBOARD=<name>` points the watcher at a private named pasteboard instead of the real clipboard — use it (plus `CLEANCOPY_STATE_DIR`) for any manual end-to-end poking so the user's actual clipboard is never touched.
 
 ## The one principle everything hangs on
 
@@ -31,8 +33,8 @@ Early scaffold. On disk right now: `package.json`, `tsconfig.json`, this file, t
 
 Two halves, chosen so the unavoidable native code stays tiny:
 
-- **TypeScript "brain" (this npm package)** — the cleanup engine, the safety decisions, the CLI, config, logging, and the watcher's orchestration logic. This is where nearly all work happens.
-- **Small Swift helper binary (planned, bundled in the npm package)** — the only parts that must touch macOS: watching the clipboard efficiently, reading/writing it, and reporting which app is frontmost. It runs continuously and streams simple messages to the Node process over stdin/stdout ("clipboard changed; front app was iTerm2; here is the plain text"); Node replies with the cleaned text or "leave it." Nothing leaves the machine. The helper remembers its own writes so it never re-cleans its own output in a loop.
+- **TypeScript "brain" (this npm package)** — the cleanup engine, the safety decisions, the CLI, config, logging, and the watcher's orchestration logic. This is where nearly all work happens. The watcher side lives in `src/watcher/`: `protocol.ts` (the line-JSON wire format), `terminals.ts` (which bundle ids count as a terminal; extend via `CLEANCOPY_TERMINALS`), `decide.ts` (the whole policy as a pure function — clean it, or leave it — unit-tested without any clipboard), `watcher.ts` (spawns the helper, restarts it with backoff if it crashes), `paths.ts` (state dir, helper resolution). Daemon lifecycle (`start`/`stop`/`status` via pid file) is in `src/cli/daemon.ts`.
+- **Small Swift helper binary (`helper/`, SwiftPM, ~150 lines, bundled in the npm package)** — the only parts that must touch macOS: polling `NSPasteboard.changeCount` every 200 ms (macOS has no clipboard-change notification; an int compare is the standard cheap approach), reading/writing plain text, and reporting which app is frontmost. It streams line-delimited JSON to the Node process over stdin/stdout ("clipboard changed; front app was iTerm2; here is the plain text"); Node replies with the cleaned text or nothing. Nothing leaves the machine. The helper remembers the changeCount of its own writes so it never re-cleans its own output in a loop, skips anything that isn't plain text, and never touches pasteboard items marked concealed/transient (password managers). It exits on stdin EOF, so it can't outlive its Node parent. `--pasteboard <name>` targets a private named pasteboard — how the integration tests exercise it without touching the real clipboard.
 
 Distribution stays `npm install -g cleancopy`; the prebuilt Swift helper ships inside the package. (An all-Swift + Homebrew build was considered and rejected in favor of keeping the engine in TypeScript.)
 

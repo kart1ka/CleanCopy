@@ -7,9 +7,10 @@ extra lines by the window width, odd spacing, and invisible characters.
 CleanCopy fixes that — **without damaging code, tables, error output, or
 commands**.
 
-> Status: early scaffold. The cleanup **engine** and its tests exist and work
-> standalone. The background clipboard watcher and the native macOS helper come
-> later. See `CLAUDE.md` for the full architecture.
+> Status: the cleanup **engine**, its test corpus, the `clean` CLI, and the
+> background **clipboard watcher** (a tiny Swift helper + Node orchestration)
+> all exist and work. Still to come: install polish (launchd autostart, npm
+> publish with a prebuilt helper). See `CLAUDE.md` for the full architecture.
 
 ## Try it
 
@@ -23,14 +24,43 @@ pbpaste | npm run -s clean | pbcopy
 npm run -s clean -- --explain < test/fixtures/05-mixed-content/input.txt
 ```
 
+## Automatic mode (the actual product)
+
+Build the native helper once (needs Xcode command-line tools), then start the
+watcher. From then on, anything you copy in a terminal is cleaned in place —
+copy, paste, done.
+
+```bash
+npm run build:helper     # compile the Swift clipboard helper
+npm run build            # compile the CLI
+
+node dist/cli/index.js start    # begin watching the clipboard
+node dist/cli/index.js status   # is it running?
+node dist/cli/index.js stop     # stop it
+node dist/cli/index.js run      # foreground mode, events printed live (debugging)
+```
+
+(After `npm install -g` / `npm link`, those become `cleancopy start` etc.)
+
+Only copies made while a known terminal (Terminal, iTerm2, Alacritty, kitty,
+WezTerm, Warp, Hyper, Ghostty, …) is frontmost are touched; everything else is
+discarded unread the moment it is seen. Set `CLEANCOPY_TERMINALS` to a
+comma-separated list of bundle ids to add your terminal.
+
+**Privacy:** nothing ever leaves the machine. Clipboard contents are never
+written to disk; the event log (`~/.cleancopy/cleancopy.log`) records only
+lines like `cleaned copy from iTerm2 (12 lines -> 4)`. Pasteboard items marked
+concealed/transient (password managers) are never read.
+
 ## Develop
 
 ```bash
-npm test                 # run the fixture + property tests
+npm test                 # run the fixture + property tests (plus helper integration tests, if built)
 npm run test:watch       # re-run on change
 npx vitest run -t 03     # run a single fixture by name
 npm run typecheck        # type-check only
 npm run build            # compile to dist/
+npm run build:helper     # build the Swift helper into helper/bin/
 ```
 
 ## How the engine works

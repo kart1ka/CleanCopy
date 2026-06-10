@@ -1,16 +1,20 @@
 #!/usr/bin/env node
 import { cleanWithReport } from '../engine';
+import { runForeground, start, status, stop } from './daemon';
 
-// The CLI is deliberately thin. For now it exposes only `clean`, which reads
-// text from stdin and prints the cleaned text to stdout — enough to dogfood the
-// engine before any background/clipboard machinery exists. start/stop/status
-// land later, once the watcher is built.
+// The CLI has two faces: `clean` pipes text through the engine once (the
+// dogfooding path), and start/stop/status/run manage the clipboard watcher —
+// the Swift helper plus this process deciding what to clean.
 
 const HELP = `cleancopy — clean up text copied from the terminal
 
 Usage:
   cleancopy clean [--explain]    read text from stdin, print the cleaned text
-  cleancopy --help              show this help
+  cleancopy start                start watching the clipboard (background)
+  cleancopy stop                 stop the background watcher
+  cleancopy status               is the watcher running?
+  cleancopy run                  run the watcher in the foreground (debugging)
+  cleancopy --help               show this help
 
 Examples:
   pbpaste | cleancopy clean | pbcopy
@@ -18,6 +22,10 @@ Examples:
 
 --explain prints, per block, what it was judged to be and why (to stderr),
 so the cleaned text on stdout stays pipeable.
+
+The watcher cleans terminal copies automatically. Everything stays on this
+machine; the event log (~/.cleancopy/cleancopy.log) records only events like
+"cleaned copy from iTerm2", never clipboard contents.
 `;
 
 function readStdin(): Promise<string> {
@@ -67,6 +75,23 @@ async function main(): Promise<void> {
 
     process.stdout.write(text);
     if (text.length > 0) process.stdout.write('\n');
+    return;
+  }
+
+  if (command === 'run') {
+    runForeground();
+    return;
+  }
+  if (command === 'start') {
+    await start();
+    return;
+  }
+  if (command === 'stop') {
+    await stop();
+    return;
+  }
+  if (command === 'status') {
+    status();
     return;
   }
 

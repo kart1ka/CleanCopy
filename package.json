@@ -9,13 +9,17 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "helper/bin"
   ],
   "engines": {
     "node": ">=18"
   },
   "scripts": {
     "build": "tsc",
+    "build:helper": "swift build -c release --package-path helper && mkdir -p helper/bin && cp helper/.build/release/cleancopy-helper helper/bin/",
+    "build:helper:universal": "swift build -c release --arch arm64 --arch x86_64 --package-path helper && mkdir -p helper/bin && cp helper/.build/apple/Products/Release/cleancopy-helper helper/bin/",
+    "prepublishOnly": "npm run build && npm run build:helper:universal",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
