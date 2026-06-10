@@ -3,7 +3,11 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { parseHelperMessage, type HelperMessage } from '../src/watcher/protocol';
+import {
+  parseHelperMessage,
+  type ClipboardEvent,
+  type HelperMessage,
+} from '../src/watcher/protocol';
 
 // Integration test for the Swift helper binary. Two helper instances share a
 // private named pasteboard (never the real clipboard): a write made through
@@ -94,6 +98,39 @@ describe.skipIf(!helperPath)('cleancopy-helper (integration, private pasteboard)
     // prevents clean → write → observe-own-write → clean loops.
     await sleep(300); // several poll intervals
     expect(writer.messages.filter((m) => m.type === 'clipboard')).toEqual([]);
+  });
+
+  it('refuses a stale write instead of destroying a newer copy', async () => {
+    const pasteboard = `cleancopy-test-${process.pid}-stale-${Date.now()}`;
+    const target = launch(pasteboard);
+    const writer = launch(pasteboard);
+    await target.waitFor((m) => m.type === 'ready');
+    await writer.waitFor((m) => m.type === 'ready');
+
+    // Two copies land in quick succession; target reports both.
+    writer.send({ type: 'write', text: 'first copy' });
+    const first = (await target.waitFor(
+      (m) => m.type === 'clipboard' && m.text === 'first copy',
+    )) as ClipboardEvent;
+    expect(typeof first.changeCount).toBe('number');
+
+    writer.send({ type: 'write', text: 'second copy' });
+    const second = (await target.waitFor(
+      (m) => m.type === 'clipboard' && m.text === 'second copy',
+    )) as ClipboardEvent;
+
+    // Answering the FIRST event now must not clobber the second copy.
+    target.send({ type: 'write', text: 'cleaned first', expectedChangeCount: first.changeCount });
+    await target.waitFor((m) => m.type === 'stale');
+
+    // Nothing was written: the writer (which sees others' changes) saw none.
+    await sleep(300); // several poll intervals
+    expect(writer.messages.filter((m) => m.type === 'clipboard')).toEqual([]);
+
+    // Answering the still-current second event goes through.
+    target.send({ type: 'write', text: 'cleaned second', expectedChangeCount: second.changeCount });
+    await target.waitFor((m) => m.type === 'wrote');
+    await writer.waitFor((m) => m.type === 'clipboard' && m.text === 'cleaned second');
   });
 
   it('exits cleanly when its stdin closes (Node side gone)', async () => {

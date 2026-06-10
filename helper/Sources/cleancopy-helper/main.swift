@@ -16,10 +16,11 @@ import Foundation
 //
 //   helper -> node  {"type":"ready"}
 //   helper -> node  {"type":"clipboard","bundleId":"com.googlecode.iterm2",
-//                    "appName":"iTerm2","text":"..."}
+//                    "appName":"iTerm2","text":"...","changeCount":42}
 //   helper -> node  {"type":"wrote"}            ack of a write
+//   helper -> node  {"type":"stale"}            write skipped: pasteboard moved on
 //   helper -> node  {"type":"pong"}             reply to ping
-//   node -> helper  {"type":"write","text":"..."}  replace clipboard contents
+//   node -> helper  {"type":"write","text":"...","expectedChangeCount":42}
 //   node -> helper  {"type":"ping"}
 //
 // Privacy: anything that is not plain text is discarded right here and never
@@ -98,6 +99,7 @@ func pollPasteboard() {
         "bundleId": app?.bundleIdentifier ?? "",
         "appName": app?.localizedName ?? "",
         "text": text,
+        "changeCount": count,
     ])
 }
 
@@ -111,6 +113,16 @@ func handle(line: Data) {
     switch type {
     case "write":
         guard let text = message["text"] as? String else { return }
+        // The user may have copied something newer between the poll that
+        // reported the event and this reply; overwriting that copy would
+        // destroy it. Node echoes back the changeCount of the event it is
+        // answering — skip the write when the pasteboard has moved on.
+        if let expected = message["expectedChangeCount"] as? Int,
+            pasteboard.changeCount != expected
+        {
+            send(["type": "stale"])
+            return
+        }
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
         ownWriteChangeCount = pasteboard.changeCount

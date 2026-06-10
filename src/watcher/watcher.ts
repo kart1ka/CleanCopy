@@ -60,6 +60,10 @@ export function startWatcher(options: WatcherOptions): Watcher {
       log('helper ready, watching clipboard');
       return;
     }
+    if (message.type === 'stale') {
+      log('skipped a clean: the clipboard changed again before it could be written');
+      return;
+    }
     if (message.type !== 'clipboard') return;
 
     // An engine bug must never take the whole daemon down: on any throw the
@@ -72,7 +76,11 @@ export function startWatcher(options: WatcherOptions): Watcher {
       return;
     }
     if (decision.action === 'write') {
-      sendToHelper({ type: 'write', text: decision.text });
+      sendToHelper({
+        type: 'write',
+        text: decision.text,
+        expectedChangeCount: message.changeCount,
+      });
       log(`cleaned copy from ${message.appName || message.bundleId} (${decision.summary})`);
     } else if (decision.reason !== 'not-terminal') {
       // Terminal copies left alone are worth a log line; non-terminal copies

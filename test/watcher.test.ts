@@ -114,12 +114,19 @@ describe('terminal allowlist', () => {
 describe('helper protocol', () => {
   it('round-trips a clipboard event with newlines and unicode intact', () => {
     const text = 'line one\nline two\t"quoted"​';
-    const line = JSON.stringify({ type: 'clipboard', bundleId: TERMINAL, appName: 'iTerm2', text });
+    const line = JSON.stringify({
+      type: 'clipboard',
+      bundleId: TERMINAL,
+      appName: 'iTerm2',
+      text,
+      changeCount: 42,
+    });
     expect(parseHelperMessage(line)).toEqual({
       type: 'clipboard',
       bundleId: TERMINAL,
       appName: 'iTerm2',
       text,
+      changeCount: 42,
     });
   });
 
@@ -157,8 +164,8 @@ describe('startWatcher — event to write, end to end', () => {
 const fs = require('fs');
 const text = fs.readFileSync(${JSON.stringify(inputPath)}, 'utf8');
 console.log(JSON.stringify({ type: 'ready' }));
-console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.apple.Safari', appName: 'Safari', text }));
-console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.googlecode.iterm2', appName: 'iTerm2', text }));
+console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.apple.Safari', appName: 'Safari', text, changeCount: 6 }));
+console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.googlecode.iterm2', appName: 'iTerm2', text, changeCount: 7 }));
 process.stdin.on('data', (d) => fs.appendFileSync(${JSON.stringify(outPath)}, d));
 process.stdin.on('end', () => process.exit(0));
 `,
@@ -174,8 +181,11 @@ process.stdin.on('end', () => process.exit(0));
       }
       const received = readFileSync(outPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
 
-      // Exactly one write — for the terminal copy, with the engine's output.
-      expect(received).toEqual([{ type: 'write', text: clean(wrappedProse) + '\n' }]);
+      // Exactly one write — for the terminal copy, with the engine's output,
+      // echoing the event's changeCount so the helper can refuse stale writes.
+      expect(received).toEqual([
+        { type: 'write', text: clean(wrappedProse) + '\n', expectedChangeCount: 7 },
+      ]);
 
       // The log knows what happened but never what the text was — and the
       // discarded non-terminal copy left no trace at all.

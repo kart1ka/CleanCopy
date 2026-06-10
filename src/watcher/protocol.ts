@@ -9,15 +9,24 @@ export interface ClipboardEvent {
   /** Human name of that app (e.g. "iTerm2") — used only for event logging. */
   appName: string;
   text: string;
+  /**
+   * NSPasteboard.changeCount at the moment this event was read. Echoed back in
+   * the write that answers it, so the helper can refuse to overwrite a newer
+   * copy that landed in between.
+   */
+  changeCount?: number;
 }
 
 export type HelperMessage =
   | ClipboardEvent
   | { type: 'ready' }
   | { type: 'wrote' }
+  | { type: 'stale' } // a write was skipped because the pasteboard had moved on
   | { type: 'pong' };
 
-export type NodeMessage = { type: 'write'; text: string } | { type: 'ping' };
+export type NodeMessage =
+  | { type: 'write'; text: string; expectedChangeCount?: number }
+  | { type: 'ping' };
 
 /** Parse one line from the helper. Returns null for anything malformed. */
 export function parseHelperMessage(line: string): HelperMessage | null {
@@ -32,6 +41,7 @@ export function parseHelperMessage(line: string): HelperMessage | null {
   switch (msg.type) {
     case 'ready':
     case 'wrote':
+    case 'stale':
     case 'pong':
       return { type: msg.type };
     case 'clipboard':
@@ -41,6 +51,7 @@ export function parseHelperMessage(line: string): HelperMessage | null {
         bundleId: typeof msg.bundleId === 'string' ? msg.bundleId : '',
         appName: typeof msg.appName === 'string' ? msg.appName : '',
         text: msg.text,
+        ...(typeof msg.changeCount === 'number' ? { changeCount: msg.changeCount } : {}),
       };
     default:
       return null;
