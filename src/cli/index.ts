@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { cleanWithReport } from '../engine';
-import { runForeground, start, status, stop } from './daemon';
+import { install, runForeground, start, status, stop, uninstall } from './daemon';
 
 // The CLI has two faces: `clean` pipes text through the engine once (the
 // dogfooding path), and start/stop/status/run manage the clipboard watcher —
@@ -13,6 +13,8 @@ Usage:
   cleancopy start                start watching the clipboard (background)
   cleancopy stop                 stop the background watcher
   cleancopy status               is the watcher running?
+  cleancopy install              start automatically at login (launchd)
+  cleancopy uninstall            stop starting automatically at login
   cleancopy run                  run the watcher in the foreground (debugging)
   cleancopy --help               show this help
 
@@ -92,6 +94,14 @@ async function main(): Promise<void> {
   }
   if (command === 'status') {
     status();
+    return;
+  }
+  if (command === 'install') {
+    await install();
+    return;
+  }
+  if (command === 'uninstall') {
+    uninstall();
     return;
   }
 

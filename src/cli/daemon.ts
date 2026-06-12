@@ -7,6 +7,14 @@ import {
   resolveHelperBinary,
   startWatcher,
 } from '../watcher';
+import {
+  currentConfig,
+  ensureDarwin,
+  isLaunchAgentLoaded,
+  loadFreshPlist,
+  plistPath,
+  removePlist,
+} from './launchagent';
 
 // `cleancopy start` daemonizes `cleancopy run`: a detached copy of this CLI
 // with stdout/stderr redirected to the event log, tracked by a pid file in
@@ -212,4 +220,52 @@ export function status(): void {
   }
   process.stdout.write(`helper: ${helper}\n`);
   process.stdout.write(`log:    ${logFilePath()}\n`);
+
+  const installed = fs.existsSync(plistPath());
+  const autostart = !installed
+    ? 'disabled (run `cleancopy install`)'
+    : isLaunchAgentLoaded()
+      ? 'enabled (starts at login)'
+      : 'installed but not loaded';
+  process.stdout.write(`autostart: ${autostart}\n`);
+}
+
+/** Register the launchd LaunchAgent so the watcher starts at login. */
+export async function install(): Promise<void> {
+  ensureDarwin();
+  resolveHelperBinary(); // fail fast with a useful message before we touch launchd
+
+  // A manually-started daemon already owns the pid file; stop it so the
+  // launch-agent copy becomes the single owner instead of colliding.
+  if (runningPid() !== null) await stop();
+
+  ensureStateDir(); // StandardOutPath's parent must exist before launchd opens it
+  try {
+    loadFreshPlist(currentConfig());
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`failed to load the launch agent: ${detail}\n`);
+    process.exit(1);
+  }
+
+  process.stdout.write('cleancopy will now start automatically at login.\n');
+  process.stdout.write(`launch agent: ${plistPath()}\n`);
+  // The plist pins an absolute Node path (launchd has a bare PATH and can't
+  // resolve a version-managed `node`). If that path moves, the agent silently
+  // fails to launch — so tell the user how to repair it.
+  process.stdout.write(
+    `note: autostart is pinned to this Node binary:\n        ${process.execPath}\n` +
+      '      If you upgrade or switch Node (e.g. via nvm/fnm), re-run `cleancopy install`.\n',
+  );
+}
+
+/** Remove the launchd LaunchAgent so the watcher no longer starts at login. */
+export function uninstall(): void {
+  ensureDarwin();
+  const existed = removePlist();
+  process.stdout.write(
+    existed
+      ? 'cleancopy will no longer start automatically.\n'
+      : 'autostart was not installed.\n',
+  );
 }
