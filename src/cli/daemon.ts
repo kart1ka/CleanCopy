@@ -95,6 +95,22 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Record the intended status before scheduling the grace-period exit. The
+ * timer is unref'd, so Node may finish naturally first; exitCode makes that
+ * natural exit carry the same status instead of silently becoming success.
+ */
+export function scheduleProcessExit(
+  code: number,
+  delayMs = 600,
+  exit: (code: number) => never = process.exit,
+): NodeJS.Timeout {
+  process.exitCode = code;
+  const timer = setTimeout(() => exit(code), delayMs);
+  timer.unref();
+  return timer;
+}
+
 /** Foreground watcher: what `cleancopy run` executes and `start` daemonizes. */
 export function runForeground(): void {
   const existing = runningPid();
@@ -125,7 +141,7 @@ export function runForeground(): void {
     watcher.stop();
     fs.rmSync(pidFilePath(), { force: true });
     // Give the helper its grace period to exit on stdin EOF.
-    setTimeout(() => process.exit(code), 600).unref();
+    scheduleProcessExit(code);
   }
 
   process.on('SIGINT', () => shutdown(0));

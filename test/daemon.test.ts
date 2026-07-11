@@ -8,6 +8,7 @@ import {
   processStartedAt,
   readPidRecord,
   runningPid,
+  scheduleProcessExit,
   writePidFile,
 } from '../src/cli/daemon';
 import { pidFilePath } from '../src/watcher/paths';
@@ -76,5 +77,20 @@ describe('isAlive', () => {
 
   it("does not claim another user's process (EPERM) — it cannot be our daemon", () => {
     expect(isAlive(1)).toBe(false); // launchd: exists, but not signalable by us
+  });
+});
+
+describe('fatal shutdown status', () => {
+  it('records the exit code before its unrefed grace-period timer can be skipped', () => {
+    const previous = process.exitCode;
+    const timer = scheduleProcessExit(1, 60_000, (() => {
+      throw new Error('test exit callback should not run');
+    }) as (code: number) => never);
+    try {
+      expect(process.exitCode).toBe(1);
+    } finally {
+      clearTimeout(timer);
+      process.exitCode = previous;
+    }
   });
 });
