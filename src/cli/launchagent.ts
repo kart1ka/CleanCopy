@@ -43,6 +43,9 @@ export function currentConfig(): LaunchAgentConfig {
     const value = process.env[key];
     if (value) env[key] = value;
   }
+  // Lets the daemon know launchd is supervising it: permanent startup
+  // failures must then exit 0, or KeepAlive would relaunch them forever.
+  env.CLEANCOPY_LAUNCHD = '1';
   return {
     label: LAUNCH_AGENT_LABEL,
     // Mirror how `start` re-execs (execArgv carries tsx's loader in dev).

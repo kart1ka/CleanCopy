@@ -11,6 +11,7 @@ import {
   runningPid,
   runningRecord,
   scheduleProcessExit,
+  startupFailureExitCode,
   writePidFile,
 } from '../src/cli/daemon';
 import { pidFilePath } from '../src/watcher/paths';
@@ -125,6 +126,24 @@ describe('isAlive', () => {
 
   it("does not claim another user's process (EPERM) — it cannot be our daemon", () => {
     expect(isAlive(1)).toBe(false); // launchd: exists, but not signalable by us
+  });
+});
+
+describe('startup failure exit status', () => {
+  // KeepAlive{SuccessfulExit:false} relaunches any non-zero exit. A failure
+  // that relaunching cannot fix (already running, missing helper) must exit 0
+  // under launchd or the agent retries forever; a manual run keeps exit 1.
+  it('is 0 under the launch agent and 1 otherwise', () => {
+    const previous = process.env.CLEANCOPY_LAUNCHD;
+    try {
+      process.env.CLEANCOPY_LAUNCHD = '1';
+      expect(startupFailureExitCode()).toBe(0);
+      delete process.env.CLEANCOPY_LAUNCHD;
+      expect(startupFailureExitCode()).toBe(1);
+    } finally {
+      if (previous === undefined) delete process.env.CLEANCOPY_LAUNCHD;
+      else process.env.CLEANCOPY_LAUNCHD = previous;
+    }
   });
 });
 

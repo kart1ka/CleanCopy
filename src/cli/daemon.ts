@@ -137,15 +137,34 @@ export function scheduleProcessExit(
   return timer;
 }
 
+/**
+ * Exit status for a startup failure that relaunching cannot fix (already
+ * running, helper binary missing). Under the launch agent (KeepAlive gated
+ * on SuccessfulExit=false) a non-zero exit means "relaunch me", which would
+ * turn such failures into an infinite retry loop — so there they exit 0.
+ */
+export function startupFailureExitCode(): number {
+  return process.env.CLEANCOPY_LAUNCHD === '1' ? 0 : 1;
+}
+
 /** Foreground watcher: what `cleancopy run` executes and `start` daemonizes. */
 export function runForeground(): void {
+  const failStartup: (message: string) => never = (message) => {
+    process.stderr.write(message);
+    process.exit(startupFailureExitCode());
+  };
+
   const existing = runningPid();
   if (existing !== null) {
-    process.stderr.write(`cleancopy is already running (pid ${existing})\n`);
-    process.exit(1);
+    failStartup(`cleancopy is already running (pid ${existing})\n`);
   }
 
-  const helperPath = resolveHelperBinary();
+  let helperPath: string;
+  try {
+    helperPath = resolveHelperBinary();
+  } catch (err) {
+    failStartup(`${err instanceof Error ? err.message : String(err)}\n`);
+  }
   ensureStateDir();
   const ownRecord = writePidFile();
 

@@ -87,6 +87,10 @@ describe('currentConfig', () => {
     expect(cfg.programArguments.at(-1)).toBe('run');
   });
 
+  it('marks the agent invocation so startup failures do not loop KeepAlive', () => {
+    expect(currentConfig().env.CLEANCOPY_LAUNCHD).toBe('1');
+  });
+
   it('forwards CLEANCOPY_* env vars that are set, and only those', () => {
     const prevState = process.env.CLEANCOPY_STATE_DIR;
     const prevPb = process.env.CLEANCOPY_PASTEBOARD;
