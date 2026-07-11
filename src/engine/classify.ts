@@ -43,6 +43,23 @@ const CODE_STATEMENT = new RegExp(
     ')',
 );
 const CODE_SYMBOLS = /[{}\[\]<>;=|\\`]/g;
+// A sequence of plain commands often has no prompt or shell punctuation at
+// all (`git checkout feature`, `brew update`, ...), so the general code-shape
+// guards cannot recognize it. Keep this deliberately conservative: only a
+// multi-line block where every line starts with a common command is protected.
+const SHELL_COMMAND = new RegExp(
+  '^\\s*(?:' +
+    [
+      'alias', 'aws', 'az', 'brew', 'bun', 'cargo', 'cat', 'cd', 'chmod', 'chown',
+      'code', 'cp', 'curl', 'deno', 'docker', 'echo', 'env', 'export', 'find',
+      'git', 'gcloud', 'go', 'grep', 'head', 'helm', 'java', 'jq', 'kubectl',
+      'less', 'ls', 'make', 'mkdir', 'mv', 'node', 'npm', 'npx', 'open', 'pip',
+      'pip3', 'pnpm', 'printf', 'python', 'python3', 'rg', 'rm', 'rsync', 'scp',
+      'sed', 'source', 'ssh', 'sudo', 'tail', 'terraform', 'touch', 'unset',
+      'which', 'wget', 'yarn',
+    ].join('|') +
+    ')(?:\\s|$)',
+);
 
 export function classify(block: Block): Classification {
   const { lines, text } = block;
@@ -61,6 +78,9 @@ export function classify(block: Block): Classification {
   }
   if (looksLikeData(lines)) {
     return verbatim('data', [...signals, 'structured-data']);
+  }
+  if (looksLikeShellCommands(lines)) {
+    return verbatim('code', [...signals, 'shell-command-sequence']);
   }
   if (looksLikeCode(lines, text)) {
     return verbatim('code', [...signals, 'code-shaped']);
@@ -83,6 +103,10 @@ export function classify(block: Block): Classification {
 
   // ---- Not sure: leave it alone. ----
   return verbatim('other', [...signals, 'uncertain']);
+}
+
+function looksLikeShellCommands(lines: string[]): boolean {
+  return lines.length >= 2 && lines.every((line) => SHELL_COMMAND.test(line));
 }
 
 function verbatim(type: Classification['type'], signals: string[]): Classification {

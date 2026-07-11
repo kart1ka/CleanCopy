@@ -1,0 +1,8 @@
+git checkout feature
+git rebase main
+cd projects/app
+ls -la
+brew update
+brew upgrade node
+git add .
+git commit -m hello
