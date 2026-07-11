@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run release:check
+      - run: lipo -info helper/bin/cleancopy-helper
+      - name: Smoke-test a packed installation
+        run: |
+          npm pack --pack-destination "$RUNNER_TEMP"
+          npm install --prefix "$RUNNER_TEMP/cleancopy-smoke" "$RUNNER_TEMP"/*.tgz
+          node "$RUNNER_TEMP/cleancopy-smoke/node_modules/cleancopy/dist/cli/index.js" --help
