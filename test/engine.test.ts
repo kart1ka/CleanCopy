@@ -56,6 +56,33 @@ describe('cleanup engine — properties', () => {
   });
 });
 
+describe('terminal escape sequences are stripped', () => {
+  const ESC = '\u001B';
+  const BEL = '\u0007';
+
+  it('strips CSI colour codes', () => {
+    expect(clean(`${ESC}[31merror text${ESC}[0m and more words here`)).toBe(
+      'error text and more words here',
+    );
+  });
+
+  it('strips OSC 8 hyperlinks (ls --hyperlink, iTerm2 shell integration)', () => {
+    expect(clean(`${ESC}]8;;file:///tmp/a.txt${BEL}a.txt${ESC}]8;;${BEL}`)).toBe('a.txt');
+  });
+
+  it('strips ST-terminated OSC sequences (window title)', () => {
+    expect(clean(`${ESC}]0;my window title${ESC}\\prompt $`)).toBe('prompt $');
+  });
+
+  it('strips an OSC sequence truncated by the end of the copy', () => {
+    expect(clean(`before ${ESC}]8;;file:///tmp`)).toBe('before');
+  });
+
+  it('strips short escapes like keypad mode and save/restore cursor', () => {
+    expect(clean(`${ESC}=text${ESC}7 more${ESC}8`)).toBe('text more');
+  });
+});
+
 describe('stripCommonMargin — literal prefix, never a character count', () => {
   it('strips a shared space margin', () => {
     expect(stripCommonMargin('  a\n  b')).toBe('a\nb');
