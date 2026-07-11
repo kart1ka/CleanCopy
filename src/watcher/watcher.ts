@@ -112,6 +112,12 @@ export function startWatcher(options: WatcherOptions): Watcher {
     child.stderr.on('data', (chunk: Buffer) => {
       log(`helper stderr: ${chunk.toString().trimEnd()}`);
     });
+    // A write can race the helper dying: without a listener, the resulting
+    // EPIPE is an unhandled stream error that takes the whole daemon down.
+    // Log it and let the 'exit' handler drive the restart.
+    child.stdin.on('error', (err) => {
+      log(`helper stdin error: ${err.message}`);
+    });
 
     child.on('error', (err) => {
       log(`helper failed to start: ${err.message}`);

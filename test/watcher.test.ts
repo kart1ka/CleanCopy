@@ -205,6 +205,50 @@ process.stdin.on('end', () => process.exit(0));
     }
   });
 
+  it('survives a reply racing helper death instead of crashing on EPIPE', async () => {
+    // The helper emits a large terminal copy, never reads stdin, and dies.
+    // The watcher's cleaned-text reply (bigger than the 64KB pipe buffer)
+    // is still pending when the helper's fds close, so the write errors
+    // with EPIPE. Unhandled, that is an uncaught stream error that kills
+    // the entire daemon instead of letting it restart the helper.
+    const dir = mkdtempSync(join(tmpdir(), 'cleancopy-epipe-'));
+    const fakeHelper = join(dir, 'dead-pipe-helper.js');
+    writeFileSync(
+      fakeHelper,
+      `#!/usr/bin/env node
+const block = ${JSON.stringify(wrappedProse.trim())};
+const text = Array(1500).fill(block).join('\\n\\n');
+console.log(JSON.stringify({ type: 'ready' }));
+console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.googlecode.iterm2', appName: 'iTerm2', text, changeCount: 3 }));
+setTimeout(() => process.exit(0), 300);
+`,
+    );
+    chmodSync(fakeHelper, 0o755);
+
+    const logLines: string[] = [];
+    const watcher = startWatcher({
+      helperPath: fakeHelper,
+      log: (line) => logLines.push(line),
+      restartDelayMs: 10_000, // no respawn during the test window
+    });
+    try {
+      const deadline = Date.now() + 3000;
+      while (
+        !logLines.some((line) => line.startsWith('helper stdin error')) &&
+        Date.now() < deadline
+      ) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      // The reply was attempted (the copy was judged cleanable)...
+      expect(logLines.join('\n')).toContain('cleaned copy from iTerm2');
+      // ...and the broken pipe became a log line, not a daemon crash.
+      expect(logLines.some((line) => line.startsWith('helper stdin error'))).toBe(true);
+    } finally {
+      watcher.stop();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('gives up when a helper repeatedly says ready and then crashes', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'cleancopy-crash-loop-'));
     const fakeHelper = join(dir, 'ready-then-crash.js');
