@@ -104,6 +104,9 @@ The golden rule is simple: when unsure, CleanCopy leaves a block unchanged.
 
 ## Development
 
+Developing and running the test suite requires Node.js 20 or later. The
+published CLI itself continues to support Node.js 18 or later.
+
 ```bash
 npm install
 npm test
