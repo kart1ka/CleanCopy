@@ -23,6 +23,7 @@ export type HelperMessage =
   | { type: 'wrote' }
   | { type: 'write-failed' }
   | { type: 'stale' } // a write was skipped because the pasteboard had moved on
+  | { type: 'dropped'; reason: string } // a copy withheld at the transport (content-free)
   | { type: 'pong' };
 
 export type NodeMessage =
@@ -46,6 +47,8 @@ export function parseHelperMessage(line: string): HelperMessage | null {
     case 'stale':
     case 'pong':
       return { type: msg.type };
+    case 'dropped':
+      return { type: 'dropped', reason: typeof msg.reason === 'string' ? msg.reason : 'unknown' };
     case 'clipboard':
       if (typeof msg.text !== 'string') return null;
       return {

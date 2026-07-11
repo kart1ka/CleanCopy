@@ -150,6 +150,24 @@ describe.skipIf(!helperPath)('cleancopy-helper (integration, private pasteboard)
     await target.waitFor((m) => m.type === 'clipboard' && m.text === 'new external copy');
   });
 
+  it('announces an oversized copy instead of silently swallowing it', async () => {
+    const pasteboard = `cleancopy-test-${process.pid}-too-large-${Date.now()}`;
+    // The cap is in UTF-16 code units, same unit as decide's policy limit.
+    const observer = launch(pasteboard, ['--max-text', '64']);
+    const writer = launch(pasteboard);
+    await observer.waitFor((m) => m.type === 'ready');
+    await writer.waitFor((m) => m.type === 'ready');
+
+    writer.send({ type: 'write', text: 'x'.repeat(65) });
+    await writer.waitFor((m) => m.type === 'wrote');
+    await observer.waitFor((m) => m.type === 'dropped' && m.reason === 'too-large');
+    expect(observer.messages.filter((m) => m.type === 'clipboard')).toEqual([]);
+
+    // A copy within the cap still flows normally afterwards.
+    writer.send({ type: 'write', text: 'small enough copy' });
+    await observer.waitFor((m) => m.type === 'clipboard' && m.text === 'small enough copy');
+  });
+
   it('exits cleanly when its stdin closes (Node side gone)', async () => {
     const helper = launch(`cleancopy-test-${process.pid}-eof`);
     await helper.waitFor((m) => m.type === 'ready');

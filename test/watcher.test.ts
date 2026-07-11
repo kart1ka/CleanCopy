@@ -146,6 +146,17 @@ describe('helper protocol', () => {
     expect(parseHelperMessage('{"type":"write-failed"}')).toEqual({ type: 'write-failed' });
   });
 
+  it('parses the content-free dropped message', () => {
+    expect(parseHelperMessage('{"type":"dropped","reason":"too-large"}')).toEqual({
+      type: 'dropped',
+      reason: 'too-large',
+    });
+    expect(parseHelperMessage('{"type":"dropped"}')).toEqual({
+      type: 'dropped',
+      reason: 'unknown',
+    });
+  });
+
   it('serializes node messages as a single line', () => {
     const serialized = serializeNodeMessage({ type: 'write', text: 'a\nb' });
     expect(serialized.endsWith('\n')).toBe(true);

@@ -19,6 +19,7 @@ import Foundation
 //                    "appName":"iTerm2","text":"...","changeCount":42}
 //   helper -> node  {"type":"wrote"}            ack of a write
 //   helper -> node  {"type":"stale"}            write skipped: pasteboard moved on
+//   helper -> node  {"type":"dropped","reason":"too-large"}  copy withheld (content-free)
 //   helper -> node  {"type":"pong"}             reply to ping
 //   node -> helper  {"type":"write","text":"...","expectedChangeCount":42}
 //   node -> helper  {"type":"ping"}
@@ -34,6 +35,13 @@ var pasteboardName: NSPasteboard.Name? = nil
 var pollInterval: TimeInterval = 0.2
 var failNextWrite = false // deterministic integration-test hook
 
+// Transport guard only — the user-visible size policy (and its "too-large"
+// log line) lives in decide.ts. Measured in UTF-16 code units, the same
+// unit as a JS string's length, so the two limits nest by construction:
+// this cap sits well above MAX_TEXT_LENGTH, and anything it withholds is
+// announced with a content-free "dropped" message instead of vanishing.
+var maxTextUTF16 = 2 * 1024 * 1024
+
 var argIndex = 1
 let arguments = CommandLine.arguments
 while argIndex < arguments.count {
@@ -46,6 +54,9 @@ while argIndex < arguments.count {
         if argIndex < arguments.count { pollInterval = max(0.05, Double(arguments[argIndex]) ?? pollInterval) }
     case "--fail-next-write":
         failNextWrite = true
+    case "--max-text": // lower the transport cap; used by the integration tests
+        argIndex += 1
+        if argIndex < arguments.count { maxTextUTF16 = Int(arguments[argIndex]) ?? maxTextUTF16 }
     default:
         FileHandle.standardError.write(Data("cleancopy-helper: unknown argument \(arguments[argIndex])\n".utf8))
         exit(2)
@@ -54,10 +65,6 @@ while argIndex < arguments.count {
 }
 
 let pasteboard = pasteboardName.map { NSPasteboard(name: $0) } ?? NSPasteboard.general
-
-// Copies larger than this are never prose worth reflowing; drop them here so
-// the text never even crosses the pipe to Node.
-let maxTextBytes = 2 * 1024 * 1024
 
 // Items marked by password managers and clipboard tools as secret or
 // ephemeral (http://nspasteboard.org) must never be read or rewritten.
@@ -92,7 +99,12 @@ func pollPasteboard() {
         return
     }
     guard let text = pasteboard.string(forType: .string) else { return } // not plain text
-    guard text.utf8.count <= maxTextBytes else { return }
+    guard text.utf16.count <= maxTextUTF16 else {
+        // Withheld, not vanished: Node logs the drop so an oversized copy is
+        // debuggable from the watcher side. The message carries no content.
+        send(["type": "dropped", "reason": "too-large"])
+        return
+    }
 
     // The frontmost app right now is the best available proxy for "the app
     // the copy came from": the poll runs within pollInterval of the copy.

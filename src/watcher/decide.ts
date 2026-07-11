@@ -6,7 +6,13 @@ import type { ClipboardEvent } from './protocol';
 // a helper process or a real clipboard: given a clipboard event, either
 // rewrite the clipboard with cleaned text or leave it alone.
 
-/** Copies longer than this are never reflow-worthy prose; leave them alone. */
+/**
+ * Copies longer than this are never reflow-worthy prose; leave them alone.
+ * Measured in UTF-16 code units (JS string length). The Swift helper has a
+ * transport guard in the same unit at twice this value — raising this limit
+ * up to that bound takes effect without rebuilding the helper, and copies
+ * the helper withholds are logged via its "dropped" message.
+ */
 export const MAX_TEXT_LENGTH = 1024 * 1024;
 
 export type Decision =
