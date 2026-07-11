@@ -50,6 +50,17 @@ describe('cleanup engine — properties', () => {
     );
   });
 
+  it('keeps the indent of a deliberately kept line inside a prose block', () => {
+    const quote = 'It has been a while.\n        Herman Melville';
+    expect(clean(quote)).toBe(quote);
+  });
+
+  it('still drops the indent of a line it glues into the sentence', () => {
+    expect(clean('The quick brown fox jumped over\n    the lazy dog by the river')).toBe(
+      'The quick brown fox jumped over the lazy dog by the river',
+    );
+  });
+
   it('survives a block of 200k lines (spread-into-Math.max overflows the stack)', () => {
     const huge = Array.from({ length: 200_000 }, () => 'aa').join('\n');
     expect(() => clean(huge)).not.toThrow();

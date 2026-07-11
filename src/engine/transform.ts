@@ -145,15 +145,21 @@ function reflowParagraph(lines: string[], ctx: TransformContext = {}): string {
   const hugging = trimmed.filter((line) => line.length >= width - NEAR_MAX).length;
   const establishedWidth = hugging >= 2 ? width : undefined;
 
-  let out = trimmed[0];
+  const out: string[] = [lines[0]];
   for (let i = 1; i < trimmed.length; i++) {
     const prev = trimmed[i - 1];
     const next = trimmed[i];
     const verdict = judgeBreak(prev, next, establishedWidth, ctx.docWidth);
     ctx.joins?.push({ line: i - 1, ...verdict });
-    out += (verdict.joined ? ' ' : '\n') + next;
+    if (verdict.joined) {
+      out[out.length - 1] += ' ' + next; // soft wrap — glue the trimmed text
+    } else {
+      out.push(lines[i]); // deliberate break — keep the line and its indent
+    }
   }
-  return out.replace(/ {2,}/g, ' ');
+  // Collapse runs of spaces, but only after the first non-space character so
+  // a kept line's leading indent (e.g. an indented attribution) survives.
+  return out.map(l => l.replace(/(\S) {2,}/g, '$1 ').trimEnd()).join('\n');
 }
 
 /** Decide whether the break between prev and next was a soft wrap. */
