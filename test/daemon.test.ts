@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  claimPidFile,
   isAlive,
   processStartedAt,
   readPidRecord,
@@ -70,6 +71,44 @@ describe('pid file identity', () => {
     expect(readPidRecord()).toBeNull();
     writeFileSync(pidFilePath(), JSON.stringify({ pid: -4, startedAt: 'x' }));
     expect(readPidRecord()).toBeNull();
+  });
+});
+
+describe('pid file claim', () => {
+  it('claims a free pid file and writes this process record', () => {
+    expect(claimPidFile()).toEqual({
+      pid: process.pid,
+      startedAt: processStartedAt(process.pid),
+    });
+    expect(runningPid()).toBe(process.pid);
+  });
+
+  it('refuses when a live daemon already holds the file', () => {
+    // The current process stands in for the live daemon.
+    expect(claimPidFile()).not.toBeNull();
+    expect(claimPidFile()).toBeNull();
+    // The winner's record is untouched by the losing claim.
+    expect(readPidRecord()?.pid).toBe(process.pid);
+  });
+
+  it('takes over a stale pid file (recycled pid, different start time)', () => {
+    writeFileSync(
+      pidFilePath(),
+      JSON.stringify({ pid: process.pid, startedAt: 'Thu Jan  1 00:00:00 1970' }),
+    );
+    expect(claimPidFile()).toEqual({
+      pid: process.pid,
+      startedAt: processStartedAt(process.pid),
+    });
+  });
+
+  it('takes over a dead daemon pid file', async () => {
+    const child = spawn(process.execPath, ['-e', '']);
+    const pid = child.pid!;
+    await new Promise((resolve) => child.on('exit', resolve));
+    writeFileSync(pidFilePath(), JSON.stringify({ pid, startedAt: 'whenever' }));
+    expect(claimPidFile()).not.toBeNull();
+    expect(readPidRecord()?.pid).toBe(process.pid);
   });
 });
 

@@ -67,6 +67,34 @@ export function writePidFile(): PidRecord {
 }
 
 /**
+ * Atomically claim the pid file for this process, or return null when a
+ * live daemon already holds it. Exclusive create (O_EXCL) closes the
+ * check-then-write race: two daemons started at once (double `start`, or a
+ * manual start racing the launchd agent at login) would both see "not
+ * running" and both come up — the second silently clobbering the first's
+ * record, leaving a daemon that stop() can never find.
+ */
+export function claimPidFile(): PidRecord | null {
+  const record: PidRecord = {
+    pid: process.pid,
+    startedAt: processStartedAt(process.pid) ?? '',
+  };
+  const payload = JSON.stringify(record) + '\n';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      fs.writeFileSync(pidFilePath(), payload, { flag: 'wx' });
+      return record;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+      // Someone holds the file. If it's a live daemon, we lose; if it's
+      // stale, runningRecord() removes it and the retry can claim it.
+      if (runningRecord() !== null) return null;
+    }
+  }
+  return null; // lost the post-cleanup re-claim race too
+}
+
+/**
  * Remove the pid file only if it still holds `record`. Between deciding a
  * daemon is gone and deleting its file, launchd (or a concurrent `start`)
  * may have written a fresh record for a new daemon — deleting that would
@@ -154,11 +182,6 @@ export function runForeground(): void {
     process.exit(startupFailureExitCode());
   };
 
-  const existing = runningPid();
-  if (existing !== null) {
-    failStartup(`cleancopy is already running (pid ${existing})\n`);
-  }
-
   let helperPath: string;
   try {
     helperPath = resolveHelperBinary();
@@ -166,7 +189,12 @@ export function runForeground(): void {
     failStartup(`${err instanceof Error ? err.message : String(err)}\n`);
   }
   ensureStateDir();
-  const ownRecord = writePidFile();
+
+  const claimed = claimPidFile();
+  if (claimed === null) {
+    failStartup(`cleancopy is already running (pid ${runningPid() ?? 'unknown'})\n`);
+  }
+  const ownRecord: PidRecord = claimed;
 
   const log = (line: string) =>
     process.stdout.write(`${new Date().toISOString()} ${line}\n`);
