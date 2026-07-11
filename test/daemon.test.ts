@@ -7,7 +7,9 @@ import {
   isAlive,
   processStartedAt,
   readPidRecord,
+  removePidFileIfMatches,
   runningPid,
+  runningRecord,
   scheduleProcessExit,
   writePidFile,
 } from '../src/cli/daemon';
@@ -67,6 +69,52 @@ describe('pid file identity', () => {
     expect(readPidRecord()).toBeNull();
     writeFileSync(pidFilePath(), JSON.stringify({ pid: -4, startedAt: 'x' }));
     expect(readPidRecord()).toBeNull();
+  });
+});
+
+describe('pid file deletion safety', () => {
+  // The race this guards: stop() decides daemon A is gone, but launchd has
+  // already relaunched daemon B and B wrote a fresh pid file. Deleting by
+  // path would orphan B — running, but invisible to status/stop.
+  it('leaves a pid file that a newer daemon has rewritten', () => {
+    const fresh = writePidFile(); // "daemon B": the current process
+    removePidFileIfMatches({ pid: 424242, startedAt: 'Thu Jun  1 00:00:00 2023' });
+    expect(readPidRecord()).toEqual(fresh);
+  });
+
+  it('leaves a pid file whose start time no longer matches the acted-on record', () => {
+    const fresh = writePidFile();
+    removePidFileIfMatches({ pid: process.pid, startedAt: 'Thu Jan  1 00:00:00 1970' });
+    expect(readPidRecord()).toEqual(fresh);
+  });
+
+  it('removes the pid file when it still holds the acted-on record', () => {
+    const record = writePidFile();
+    removePidFileIfMatches(record);
+    expect(existsSync(pidFilePath())).toBe(false);
+  });
+
+  it('tolerates the file already being gone', () => {
+    expect(() =>
+      removePidFileIfMatches({ pid: process.pid, startedAt: '' }),
+    ).not.toThrow();
+  });
+
+  it('falls back to pid-only matching when a side recorded no start time', () => {
+    writePidFile();
+    removePidFileIfMatches({ pid: process.pid, startedAt: '' });
+    expect(existsSync(pidFilePath())).toBe(false);
+  });
+
+  it('runningRecord returns the validated record and still cleans stale files', () => {
+    const record = writePidFile();
+    expect(runningRecord()).toEqual(record);
+    writeFileSync(
+      pidFilePath(),
+      JSON.stringify({ pid: process.pid, startedAt: 'Thu Jan  1 00:00:00 1970' }),
+    );
+    expect(runningRecord()).toBeNull();
+    expect(existsSync(pidFilePath())).toBe(false);
   });
 });
 

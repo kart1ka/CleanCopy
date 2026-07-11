@@ -57,12 +57,33 @@ export function readPidRecord(): PidRecord | null {
   }
 }
 
-export function writePidFile(): void {
+export function writePidFile(): PidRecord {
   const record: PidRecord = {
     pid: process.pid,
     startedAt: processStartedAt(process.pid) ?? '',
   };
   fs.writeFileSync(pidFilePath(), JSON.stringify(record) + '\n');
+  return record;
+}
+
+/**
+ * Remove the pid file only if it still holds `record`. Between deciding a
+ * daemon is gone and deleting its file, launchd (or a concurrent `start`)
+ * may have written a fresh record for a new daemon — deleting that would
+ * leave the new daemon running but untracked.
+ */
+export function removePidFileIfMatches(record: PidRecord): void {
+  const current = readPidRecord();
+  if (current === null) return;
+  if (current.pid !== record.pid) return;
+  if (
+    record.startedAt !== '' &&
+    current.startedAt !== '' &&
+    current.startedAt !== record.startedAt
+  ) {
+    return;
+  }
+  fs.rmSync(pidFilePath(), { force: true });
 }
 
 export function isAlive(pid: number): boolean {
@@ -83,12 +104,17 @@ function isOurs(record: PidRecord): boolean {
   return record.startedAt === '' || processStartedAt(record.pid) === record.startedAt;
 }
 
-export function runningPid(): number | null {
+/** The validated record of a live daemon, or null (stale files are removed). */
+export function runningRecord(): PidRecord | null {
   const record = readPidRecord();
   if (record === null) return null;
-  if (isOurs(record)) return record.pid;
-  fs.rmSync(pidFilePath(), { force: true }); // stale pid file
+  if (isOurs(record)) return record;
+  removePidFileIfMatches(record); // stale pid file
   return null;
+}
+
+export function runningPid(): number | null {
+  return runningRecord()?.pid ?? null;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -121,7 +147,7 @@ export function runForeground(): void {
 
   const helperPath = resolveHelperBinary();
   ensureStateDir();
-  writePidFile();
+  const ownRecord = writePidFile();
 
   const log = (line: string) =>
     process.stdout.write(`${new Date().toISOString()} ${line}\n`);
@@ -139,7 +165,7 @@ export function runForeground(): void {
     shuttingDown = true;
     log('stopping');
     watcher.stop();
-    fs.rmSync(pidFilePath(), { force: true });
+    removePidFileIfMatches(ownRecord);
     // Give the helper its grace period to exit on stdin EOF.
     scheduleProcessExit(code);
   }
@@ -186,12 +212,14 @@ export async function start(): Promise<void> {
 }
 
 export async function stop(): Promise<void> {
-  const pid = runningPid();
-  const record = readPidRecord();
-  if (pid === null || record === null) {
+  // One validated read: pid and identity always come from the same record,
+  // and every deletion below re-checks the file still holds that record.
+  const record = runningRecord();
+  if (record === null) {
     process.stdout.write('cleancopy is not running\n');
     return;
   }
+  const pid = record.pid;
   try {
     process.kill(pid, 'SIGTERM');
   } catch {
@@ -200,7 +228,7 @@ export async function stop(): Promise<void> {
   for (let i = 0; i < 30; i++) {
     await sleep(100);
     if (!isAlive(pid)) {
-      fs.rmSync(pidFilePath(), { force: true });
+      removePidFileIfMatches(record);
       process.stdout.write('cleancopy stopped\n');
       return;
     }
@@ -208,7 +236,7 @@ export async function stop(): Promise<void> {
   // Re-verify identity before the force kill: SIGKILL must never reach a
   // process that merely inherited the daemon's old pid.
   if (record.startedAt !== '' && processStartedAt(pid) !== record.startedAt) {
-    fs.rmSync(pidFilePath(), { force: true });
+    removePidFileIfMatches(record);
     process.stdout.write('cleancopy stopped\n');
     return;
   }
@@ -218,7 +246,7 @@ export async function stop(): Promise<void> {
   } catch {
     // Already gone.
   }
-  fs.rmSync(pidFilePath(), { force: true });
+  removePidFileIfMatches(record);
 }
 
 export function status(): void {
