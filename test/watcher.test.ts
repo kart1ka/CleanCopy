@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { clean } from '../src/engine';
@@ -195,6 +202,46 @@ process.stdin.on('end', () => process.exit(0));
       expect(logLines.join('\n')).not.toContain('cleanup engine'); // words from the copied text
     } finally {
       watcher.stop();
+    }
+  });
+
+  it('gives up when a helper repeatedly says ready and then crashes', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cleancopy-crash-loop-'));
+    const fakeHelper = join(dir, 'ready-then-crash.js');
+    writeFileSync(
+      fakeHelper,
+      `#!/usr/bin/env node
+console.log(JSON.stringify({ type: 'ready' }));
+setTimeout(() => process.exit(1), 5);
+`,
+    );
+    chmodSync(fakeHelper, 0o755);
+
+    const logLines: string[] = [];
+    let fatal: (error: Error) => void;
+    const fatalError = new Promise<Error>((resolve) => {
+      fatal = resolve;
+    });
+    const watcher = startWatcher({
+      helperPath: fakeHelper,
+      log: (line) => logLines.push(line),
+      restartDelayMs: 10,
+      maxConsecutiveCrashes: 2,
+      onFatal: (error) => fatal(error),
+    });
+
+    try {
+      const error = await Promise.race([
+        fatalError,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('watcher never gave up')), 2000),
+        ),
+      ]);
+      expect(error.message).toBe('helper crashed 2 times in a row; giving up');
+      expect(logLines.filter((line) => line === 'helper ready, watching clipboard')).toHaveLength(2);
+    } finally {
+      watcher.stop();
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

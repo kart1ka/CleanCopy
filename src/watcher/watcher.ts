@@ -23,6 +23,10 @@ export interface WatcherOptions {
   extraTerminals?: readonly string[];
   /** Called when the helper keeps crashing and the watcher gives up. */
   onFatal?: (error: Error) => void;
+  /** Restart delay override, primarily for deterministic tests. */
+  restartDelayMs?: number;
+  /** Crash limit override, primarily for deterministic tests. */
+  maxConsecutiveCrashes?: number;
 }
 
 // If the helper dies it is restarted, but a helper that can't stay up for
@@ -40,6 +44,9 @@ export interface Watcher {
 export function startWatcher(options: WatcherOptions): Watcher {
   const log = options.log ?? (() => {});
   const extraTerminals = options.extraTerminals ?? extraTerminalsFromEnv();
+  const restartDelayMs = options.restartDelayMs ?? RESTART_DELAY_MS;
+  const maxConsecutiveCrashes =
+    options.maxConsecutiveCrashes ?? MAX_CONSECUTIVE_CRASHES;
 
   let child: ChildProcessWithoutNullStreams | null = null;
   let stopping = false;
@@ -56,7 +63,6 @@ export function startWatcher(options: WatcherOptions): Watcher {
     if (!message) return;
 
     if (message.type === 'ready') {
-      consecutiveCrashes = 0;
       log('helper ready, watching clipboard');
       return;
     }
@@ -125,15 +131,15 @@ export function startWatcher(options: WatcherOptions): Watcher {
     if (stopping) return;
     if (Date.now() - lastSpawnAt > RESTART_RESET_MS) consecutiveCrashes = 0;
     consecutiveCrashes += 1;
-    if (consecutiveCrashes > MAX_CONSECUTIVE_CRASHES) {
+    if (consecutiveCrashes >= maxConsecutiveCrashes) {
       const error = new Error(
-        `helper crashed ${MAX_CONSECUTIVE_CRASHES} times in a row; giving up`,
+        `helper crashed ${maxConsecutiveCrashes} times in a row; giving up`,
       );
       log(error.message);
       options.onFatal?.(error);
       return;
     }
-    restartTimer = setTimeout(spawnHelper, RESTART_DELAY_MS);
+    restartTimer = setTimeout(spawnHelper, restartDelayMs);
   }
 
   spawnHelper();
