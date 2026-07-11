@@ -28,6 +28,8 @@ export interface Block {
   lines: string[];
   /** The block's text — `lines` joined by "\n". */
   text: string;
+  /** Number of blank lines that separated this block from the previous one. */
+  blankLinesBefore: number;
 }
 
 export interface CleanOptions {

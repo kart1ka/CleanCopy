@@ -19,7 +19,8 @@ export type { TransformContext } from './transform';
  *   2. segment    — split into blocks at blank lines
  *   3. classify   — judge each block (prose? code? list? …)
  *   4. transform  — tidy each block according to what it is
- * then the blocks are stitched back together with a single blank line between.
+ * then the blocks are stitched back together with their original internal
+ * blank-line separators.
  *
  * Golden rule: when unsure, a block is left exactly as it was.
  */
@@ -67,9 +68,10 @@ export function cleanWithReport(input: string, options: CleanOptions = {}): Clea
   });
 
   const text = reports
-    .map((r) => r.output)
-    .join('\n\n')
-    .replace(/\n{3,}/g, '\n\n') // collapse any stray big gaps
+    .map((r, i) =>
+      i === 0 ? r.output : '\n'.repeat(r.block.blankLinesBefore + 1) + r.output,
+    )
+    .join('')
     .replace(/[ \t]+$/gm, '') // belt-and-braces trailing trim
     .replace(/^\n+|\n+$/g, ''); // no leading / trailing blank lines
 
