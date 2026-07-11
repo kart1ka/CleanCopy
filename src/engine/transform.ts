@@ -109,6 +109,8 @@ export interface TransformContext {
   docWidth?: number;
   /** When provided, every break decision is recorded here (for `--explain`). */
   joins?: JoinReport[];
+  /** Keep a list block's leading indent when it belongs under a prior list. */
+  preserveListIndent?: boolean;
 }
 
 export function transform(
@@ -221,13 +223,13 @@ function hasUnclosedOpener(line: string): boolean {
  * follows an item ending in ":", stays on its own line.
  */
 function reflowList(lines: string[], ctx: TransformContext = {}): string {
-  // A list block can sit indented as a whole, relative to the prose around it
-  // (the global margin strip in normalize only removes indentation shared by
-  // the *entire* paste) — that block-wide margin is rendering, and goes. But
-  // indent beyond it is structure: it is what nests a child item under its
-  // parent. So strip the block's own common margin, then keep every line's
-  // remaining indent.
-  const block = stripCommonMargin(lines.join('\n')).split('\n');
+  // A list block can sit indented as a whole, relative to the prose around it.
+  // Usually that is copied render margin and can be removed. When it follows
+  // another list block, though, the same indent can express a child list split
+  // off by a blank line, so keep it intact.
+  const block = ctx.preserveListIndent
+    ? lines
+    : stripCommonMargin(lines.join('\n')).split('\n');
   const width = block.reduce((m, l) => Math.max(m, l.trim().length), 0);
   const out: string[] = [];
 

@@ -44,6 +44,12 @@ describe('cleanup engine — properties', () => {
     expect(clean('')).toBe('');
   });
 
+  it('keeps the indent of an isolated nested-list fragment', () => {
+    expect(clean('  - child item one\n  - child item two')).toBe(
+      '  - child item one\n  - child item two',
+    );
+  });
+
   it('survives a block of 200k lines (spread-into-Math.max overflows the stack)', () => {
     const huge = Array.from({ length: 200_000 }, () => 'aa').join('\n');
     expect(() => clean(huge)).not.toThrow();

@@ -18,6 +18,7 @@ const ZERO_WIDTH = new RegExp('[\\u200B\\u2060\\uFEFF]', 'g');
 const EXOTIC_SPACES = new RegExp('[\\u00A0\\u1680\\u2000-\\u200A\\u202F\\u205F\\u3000]', 'g');
 // ANSI colour / formatting escape sequences (usually stripped on copy, but just in case).
 const ANSI = new RegExp('\\u001B\\[[0-9;?]*[ -\\/]*[@-~]', 'g');
+const LIST_ITEM = /^[ \t]*(?:[-*+\u2022]\s+|\d+[.)]\s+)/;
 
 export function normalize(input: string): string {
   let text = input;
@@ -39,11 +40,29 @@ export function normalize(input: string): string {
     .join('\n');
 
   // 5. Slide everything back to the left edge: remove the indentation that
-  //    EVERY non-blank line shares (the terminal / Claude render margin). This
-  //    is safe even for code — the block just shifts left, its inner shape kept.
-  text = stripCommonMargin(text);
+  //    EVERY non-blank line shares (the terminal / Claude render margin). An
+  //    indented list copied on its own is ambiguous: its margin may instead be
+  //    the list's nesting level. Preserve it rather than flattening structure.
+  if (!isIndentedListFragment(text)) text = stripCommonMargin(text);
 
   return text;
+}
+
+function isIndentedListFragment(text: string): boolean {
+  const lines = text.split('\n').filter((line) => line.trim() !== '');
+  if (lines.length === 0 || !LIST_ITEM.test(lines[0])) return false;
+
+  const firstIndent = lines[0].match(/^[ \t]*/)?.[0] ?? '';
+  if (firstIndent === '') return false;
+  const continuationIndent = firstIndent.length + 2;
+
+  // A wrapped list item continues at an indent, while sibling items carry a
+  // marker. Anything else means this is not safely recognizable as one list.
+  return lines.every((line) => {
+    if (LIST_ITEM.test(line)) return true;
+    const indent = line.match(/^[ \t]*/)?.[0] ?? '';
+    return indent.length >= continuationIndent && /\S/.test(line);
+  });
 }
 
 /**

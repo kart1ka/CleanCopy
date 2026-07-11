@@ -53,7 +53,16 @@ export function cleanWithReport(input: string, options: CleanOptions = {}): Clea
   const reports: BlockReport[] = blocks.map((block, i) => {
     const classification = classifications[i];
     const joins: JoinReport[] | undefined = options.explain ? [] : undefined;
-    const output = transform(block, classification, { docWidth: inferredWidth, joins });
+    const output = transform(block, classification, {
+      docWidth: inferredWidth,
+      joins,
+      // A later indented list block can be a child list separated from its
+      // parent by a blank line. Its leading spaces are structure, not margin.
+      preserveListIndent:
+        classification.type === 'list' &&
+        (classifications[i - 1]?.type === 'list' ||
+          (blocks.length === 1 && /^[ \t]+/.test(block.lines[0] ?? ''))),
+    });
     return { block, classification, output, joins };
   });
 
