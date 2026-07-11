@@ -62,6 +62,7 @@ export function cleanWithReport(input: string, options: CleanOptions = {}): Clea
       preserveListIndent:
         classification.type === 'list' &&
         (classifications[i - 1]?.type === 'list' ||
+          classifications[i + 1]?.type === 'list' ||
           (blocks.length === 1 && /^[ \t]+/.test(block.lines[0] ?? ''))),
     });
     return { block, classification, output, joins };
