@@ -25,8 +25,10 @@ class Helper {
   readonly messages: HelperMessage[] = [];
   readonly exited: Promise<number | null>;
 
-  constructor(binary: string, pasteboard: string) {
-    this.child = spawn(binary, ['--pasteboard', pasteboard, '--interval', '0.05']);
+  constructor(binary: string, pasteboard: string, extraArgs: string[] = []) {
+    this.child = spawn(binary, [
+      '--pasteboard', pasteboard, '--interval', '0.05', ...extraArgs,
+    ]);
     createInterface({ input: this.child.stdout }).on('line', (line) => {
       const message = parseHelperMessage(line);
       if (message) this.messages.push(message);
@@ -59,8 +61,8 @@ function sleep(ms: number): Promise<void> {
 
 describe.skipIf(!helperPath)('cleancopy-helper (integration, private pasteboard)', () => {
   const helpers: Helper[] = [];
-  const launch = (pasteboard: string) => {
-    const helper = new Helper(helperPath!, pasteboard);
+  const launch = (pasteboard: string, extraArgs: string[] = []) => {
+    const helper = new Helper(helperPath!, pasteboard, extraArgs);
     helpers.push(helper);
     return helper;
   };
@@ -131,6 +133,21 @@ describe.skipIf(!helperPath)('cleancopy-helper (integration, private pasteboard)
     target.send({ type: 'write', text: 'cleaned second', expectedChangeCount: second.changeCount });
     await target.waitFor((m) => m.type === 'wrote');
     await writer.waitFor((m) => m.type === 'clipboard' && m.text === 'cleaned second');
+  });
+
+  it('reports a failed write and still observes the next external copy', async () => {
+    const pasteboard = `cleancopy-test-${process.pid}-write-failure-${Date.now()}`;
+    const target = launch(pasteboard, ['--fail-next-write']);
+    const writer = launch(pasteboard);
+    await target.waitFor((m) => m.type === 'ready');
+    await writer.waitFor((m) => m.type === 'ready');
+
+    target.send({ type: 'write', text: 'this write is forced to fail' });
+    await target.waitFor((m) => m.type === 'write-failed');
+
+    writer.send({ type: 'write', text: 'new external copy' });
+    await writer.waitFor((m) => m.type === 'wrote');
+    await target.waitFor((m) => m.type === 'clipboard' && m.text === 'new external copy');
   });
 
   it('exits cleanly when its stdin closes (Node side gone)', async () => {

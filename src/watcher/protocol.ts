@@ -21,6 +21,7 @@ export type HelperMessage =
   | ClipboardEvent
   | { type: 'ready' }
   | { type: 'wrote' }
+  | { type: 'write-failed' }
   | { type: 'stale' } // a write was skipped because the pasteboard had moved on
   | { type: 'pong' };
 
@@ -41,6 +42,7 @@ export function parseHelperMessage(line: string): HelperMessage | null {
   switch (msg.type) {
     case 'ready':
     case 'wrote':
+    case 'write-failed':
     case 'stale':
     case 'pong':
       return { type: msg.type };

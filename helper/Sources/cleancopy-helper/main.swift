@@ -32,6 +32,7 @@ import Foundation
 
 var pasteboardName: NSPasteboard.Name? = nil
 var pollInterval: TimeInterval = 0.2
+var failNextWrite = false // deterministic integration-test hook
 
 var argIndex = 1
 let arguments = CommandLine.arguments
@@ -43,6 +44,8 @@ while argIndex < arguments.count {
     case "--interval": // seconds between changeCount polls
         argIndex += 1
         if argIndex < arguments.count { pollInterval = max(0.05, Double(arguments[argIndex]) ?? pollInterval) }
+    case "--fail-next-write":
+        failNextWrite = true
     default:
         FileHandle.standardError.write(Data("cleancopy-helper: unknown argument \(arguments[argIndex])\n".utf8))
         exit(2)
@@ -124,7 +127,19 @@ func handle(line: Data) {
             return
         }
         pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        let wrote: Bool
+        if failNextWrite {
+            failNextWrite = false
+            wrote = false
+        } else {
+            wrote = pasteboard.setString(text, forType: .string)
+        }
+        guard wrote else {
+            // Do not claim this changeCount as ours. If another process took
+            // ownership during the write, the next poll must still report it.
+            send(["type": "write-failed"])
+            return
+        }
         ownWriteChangeCount = pasteboard.changeCount
         lastSeenChangeCount = pasteboard.changeCount
         send(["type": "wrote"])

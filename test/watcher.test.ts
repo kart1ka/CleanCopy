@@ -136,6 +136,7 @@ describe('helper protocol', () => {
     expect(parseHelperMessage('42')).toBeNull();
     expect(parseHelperMessage('{"type":"clipboard"}')).toBeNull(); // no text
     expect(parseHelperMessage('{"type":"mystery"}')).toBeNull();
+    expect(parseHelperMessage('{"type":"write-failed"}')).toEqual({ type: 'write-failed' });
   });
 
   it('serializes node messages as a single line', () => {

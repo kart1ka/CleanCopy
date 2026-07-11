@@ -64,6 +64,10 @@ export function startWatcher(options: WatcherOptions): Watcher {
       log('skipped a clean: the clipboard changed again before it could be written');
       return;
     }
+    if (message.type === 'write-failed') {
+      log('skipped a clean: the native helper could not write to the clipboard');
+      return;
+    }
     if (message.type !== 'clipboard') return;
 
     // An engine bug must never take the whole daemon down: on any throw the
