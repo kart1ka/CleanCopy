@@ -139,12 +139,17 @@ function reflowParagraph(lines: string[], ctx: TransformContext = {}): string {
   if (trimmed.length === 1) return trimmed[0];
 
   const width = trimmed.reduce((m, l) => Math.max(m, l.length), 0);
+  // One longest line is not evidence of a wrap column: it may have been
+  // created by an earlier cleanup pass. Require the edge to repeat before it
+  // can independently justify removing another break.
+  const hugging = trimmed.filter((line) => line.length >= width - NEAR_MAX).length;
+  const establishedWidth = hugging >= 2 ? width : undefined;
 
   let out = trimmed[0];
   for (let i = 1; i < trimmed.length; i++) {
     const prev = trimmed[i - 1];
     const next = trimmed[i];
-    const verdict = judgeBreak(prev, next, width, ctx.docWidth);
+    const verdict = judgeBreak(prev, next, establishedWidth, ctx.docWidth);
     ctx.joins?.push({ line: i - 1, ...verdict });
     out += (verdict.joined ? ' ' : '\n') + next;
   }
@@ -155,7 +160,7 @@ function reflowParagraph(lines: string[], ctx: TransformContext = {}): string {
 function judgeBreak(
   prev: string,
   next: string,
-  width: number,
+  width: number | undefined,
   docWidth?: number,
 ): Omit<JoinReport, 'line'> {
   // Hard vetoes — breaks that are deliberate by construction, whatever the
@@ -166,7 +171,7 @@ function judgeBreak(
   if (LIST_ITEM.test(next)) return { joined: false, score: 0, signals: ['veto:list-item'] };
 
   const atRightEdge =
-    prev.length >= WRAP_MIN && prev.length >= width - NEAR_MAX;
+    width !== undefined && prev.length >= WRAP_MIN && prev.length >= width - NEAR_MAX;
 
   let score = 0;
   const signals: string[] = [];
@@ -231,6 +236,8 @@ function reflowList(lines: string[], ctx: TransformContext = {}): string {
     ? lines
     : stripCommonMargin(lines.join('\n')).split('\n');
   const width = block.reduce((m, l) => Math.max(m, l.trim().length), 0);
+  const hugging = block.filter((line) => line.trim().length >= width - NEAR_MAX).length;
+  const establishedWidth = hugging >= 2 ? width : undefined;
   const out: string[] = [];
 
   for (let i = 0; i < block.length; i++) {
@@ -241,7 +248,7 @@ function reflowList(lines: string[], ctx: TransformContext = {}): string {
     }
     const prev = block[i - 1].trim();
     const next = line.trim();
-    const verdict = judgeBreak(prev, next, width, ctx.docWidth);
+    const verdict = judgeBreak(prev, next, establishedWidth, ctx.docWidth);
     ctx.joins?.push({ line: i - 1, ...verdict });
     if (verdict.joined) {
       out[out.length - 1] += ' ' + next; // wrapped continuation
