@@ -188,9 +188,14 @@ function looksLikeProse(text: string): boolean {
  * More confident when the block looks hard-wrapped: several lines of similar
  * length where the inner lines don't end on a sentence-ending mark — the
  * fingerprint of a paragraph chopped by the window's width.
+ *
+ * A single line scores below REFLOW_THRESHOLD on purpose: it has no break to
+ * repair, so reflowing could only collapse its internal spacing — and a lone
+ * line offers no structure to prove that spacing isn't deliberate alignment
+ * (a copied table row, say). Nothing to gain, real damage possible: skip it.
  */
 function proseConfidence(lines: string[]): number {
-  if (lines.length < 2) return 0.6;
+  if (lines.length < 2) return 0.5;
   // reduce, not Math.max(...spread): a block can run to 100k+ lines, and that
   // many spread arguments overflow the call stack.
   const max = lines.reduce((m, l) => Math.max(m, l.length), 0);

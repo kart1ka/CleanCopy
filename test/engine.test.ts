@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { clean, inferWrapWidth, stripCommonMargin } from '../src/engine';
+import {
+  clean,
+  cleanWithReport,
+  inferWrapWidth,
+  REFLOW_THRESHOLD,
+  stripCommonMargin,
+} from '../src/engine';
 
 // Fixture-driven golden tests. Each directory under test/fixtures/ holds an
 // input.txt and the expected.txt it should clean to. This corpus IS the
@@ -68,6 +74,27 @@ describe('cleanup engine — properties', () => {
   it('survives a block of 200k lines (spread-into-Math.max overflows the stack)', () => {
     const huge = Array.from({ length: 200_000 }, () => 'aa').join('\n');
     expect(() => clean(huge)).not.toThrow();
+  });
+});
+
+describe('single-line blocks are below the reflow threshold', () => {
+  // One line has no wrap to repair; reflow could only collapse its internal
+  // spacing, and a lone line can't prove that spacing isn't alignment.
+  it('leaves a copied single table row intact', () => {
+    const row = 'NAME    READY   UP-TO-DATE   AVAILABLE';
+    expect(clean(row)).toBe(row);
+  });
+
+  it('leaves a single prose line with doubled spaces intact', () => {
+    const line = 'One sentence.  Another sentence after wide spacing.';
+    expect(clean(line)).toBe(line);
+  });
+
+  it('scores single-line prose below REFLOW_THRESHOLD', () => {
+    const { reports } = cleanWithReport('just a few plain words');
+    expect(reports).toHaveLength(1);
+    expect(reports[0].classification.type).toBe('prose');
+    expect(reports[0].classification.confidence).toBeLessThan(REFLOW_THRESHOLD);
   });
 });
 

@@ -1,14 +1,14 @@
 import { normalize } from './normalize';
 import { segment } from './segment';
 import { classify } from './classify';
-import { transform, inferWrapWidth, REFLOW_THRESHOLD } from './transform';
+import { transform, inferWrapWidth, shouldReflow } from './transform';
 import type { BlockReport, CleanOptions, CleanResult, JoinReport } from './types';
 
 export * from './types';
 export { normalize, stripCommonMargin } from './normalize';
 export { segment } from './segment';
 export { classify } from './classify';
-export { transform, inferWrapWidth, REFLOW_THRESHOLD } from './transform';
+export { transform, inferWrapWidth, REFLOW_THRESHOLD, shouldReflow } from './transform';
 export type { TransformContext } from './transform';
 
 /**
@@ -47,11 +47,7 @@ export function cleanWithReport(input: string, options: CleanOptions = {}): Clea
   // spurious column that could join deliberate prose breaks near it.
   const inferredWidth = inferWrapWidth(
     blocks
-      .filter(
-        (_, i) =>
-          classifications[i].reflowable &&
-          classifications[i].confidence >= REFLOW_THRESHOLD,
-      )
+      .filter((_, i) => shouldReflow(classifications[i]))
       .map((b) => b.text)
       .join('\n'),
   );

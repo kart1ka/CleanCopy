@@ -12,6 +12,16 @@ const LIST_ITEM = /^(\s*)([-*+•]\s+|\d+[.)]\s+)/;
 /** Below this confidence, don't reflow — leave the block alone. */
 export const REFLOW_THRESHOLD = 0.6;
 
+/**
+ * The one reflow gate, shared by transform() and the doc-width inference so
+ * they can never disagree about which blocks are reflow candidates. The
+ * threshold is a real knob: single-line prose scores 0.5 (below it), loose
+ * multi-line prose 0.7, lists 0.8, wrap-shaped prose 0.9.
+ */
+export function shouldReflow(c: Classification): boolean {
+  return c.reflowable && c.confidence >= REFLOW_THRESHOLD;
+}
+
 // When deciding whether a line break is a soft wrap (remove it) or an
 // intentional break (keep it), one signal is uniformity: a wrapped line runs
 // nearly to the block's widest line (NEAR_MAX), because the only reason it
@@ -118,7 +128,7 @@ export function transform(
   c: Classification,
   ctx: TransformContext = {},
 ): string {
-  if (c.reflowable && c.confidence >= REFLOW_THRESHOLD) {
+  if (shouldReflow(c)) {
     if (c.type === 'list') return reflowList(block.lines, ctx);
     if (c.type === 'prose') return reflowParagraph(block.lines, ctx);
   }
