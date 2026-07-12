@@ -1,3 +1,4 @@
+import { LIST_ITEM } from './classify';
 import { stripCommonMargin } from './normalize';
 import type { Block, Classification, JoinReport } from './types';
 
@@ -6,8 +7,6 @@ import type { Block, Classification, JoinReport } from './types';
 // Only prose and lists that the classifier is confident about get reflowed.
 // Everything else is returned verbatim (the always-safe normalize step has
 // already run on the whole text).
-
-const LIST_ITEM = /^(\s*)([-*+•]\s+|\d+[.)]\s+)/;
 
 /** Below this confidence, don't reflow — leave the block alone. */
 export const REFLOW_THRESHOLD = 0.6;

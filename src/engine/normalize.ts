@@ -1,3 +1,5 @@
+import { LIST_ITEM } from './classify';
+
 // Step 1 of the pipeline: the always-safe tidy-ups.
 //
 // These run on EVERY copy, no judgement required, and never change the meaning
@@ -29,7 +31,6 @@ const ANSI = new RegExp(
     ')',
   'g',
 );
-const LIST_ITEM = /^[ \t]*(?:[-*+\u2022]\s+|\d+[.)]\s+)/;
 
 export function normalize(input: string): string {
   let text = input;

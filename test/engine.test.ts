@@ -77,6 +77,26 @@ describe('cleanup engine — properties', () => {
   });
 });
 
+describe('list markers are recognized consistently across the pipeline', () => {
+  // normalize (keep an indented fragment's margin), classify (call it a
+  // list), and transform (find item starts) share one LIST_ITEM regex; every
+  // marker must behave identically in all three or sibling items get glued.
+  const markers = ['- ', '* ', '+ ', '• ', '1. ', '1) '];
+  for (const marker of markers) {
+    it(`keeps "${marker.trim()}" items apart and joins their wrapped lines`, () => {
+      const wrapped = `${marker}first item text that\ncontinues on a second line\n${marker}second item stays put`;
+      expect(clean(wrapped)).toBe(
+        `${marker}first item text that continues on a second line\n${marker}second item stays put`,
+      );
+    });
+
+    it(`keeps the margin of an isolated indented "${marker.trim()}" fragment`, () => {
+      const fragment = `  ${marker}alpha item\n  ${marker}beta item`;
+      expect(clean(fragment)).toBe(fragment);
+    });
+  }
+});
+
 describe('single-line blocks are below the reflow threshold', () => {
   // One line has no wrap to repair; reflow could only collapse its internal
   // spacing, and a lone line can't prove that spacing isn't alignment.

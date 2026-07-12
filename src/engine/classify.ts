@@ -11,8 +11,15 @@ import type { Block, Classification } from './types';
 // THIS FILE IS THE HEART OF THE PRODUCT. Tune it against real fixtures, and
 // keep the bias toward never reflowing code/logs/tables.
 
-/** A line that starts a bullet or numbered list item. */
-export const LIST_ITEM = /^\s*([-*+•]\s+|\d+[.)]\s+)/;
+/**
+ * A line that starts a bullet or numbered list item. The single source of
+ * truth for "list-ness": normalize (keep an indented fragment's margin),
+ * classify (judge a block a list), and transform (find item starts during
+ * reflow) all import this one regex — three drifting copies would let a
+ * block classify as a list whose items the reflow can no longer see, gluing
+ * sibling bullets together.
+ */
+export const LIST_ITEM = /^\s*(?:[-*+•]\s+|\d+[.)]\s+)/;
 
 // Lines that use a programming keyword the way code does. A bare keyword at
 // the start of a line is deliberately NOT a tell when it is also an ordinary
