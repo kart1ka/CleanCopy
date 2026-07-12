@@ -146,6 +146,26 @@ describe('helper protocol', () => {
     expect(parseHelperMessage('{"type":"write-failed"}')).toEqual({ type: 'write-failed' });
   });
 
+  it('parses hotkey presses and registration failures', () => {
+    expect(parseHelperMessage('{"type":"hotkey","id":"revert"}')).toEqual({
+      type: 'hotkey',
+      id: 'revert',
+    });
+    expect(parseHelperMessage('{"type":"hotkey-failed","id":"clean"}')).toEqual({
+      type: 'hotkey-failed',
+      id: 'clean',
+    });
+    expect(parseHelperMessage('{"type":"hotkey"}')).toBeNull(); // no id
+  });
+
+  it('parses the changeCount a wrote ack carries', () => {
+    expect(parseHelperMessage('{"type":"wrote","changeCount":9}')).toEqual({
+      type: 'wrote',
+      changeCount: 9,
+    });
+    expect(parseHelperMessage('{"type":"wrote"}')).toEqual({ type: 'wrote' });
+  });
+
   it('parses the content-free dropped message', () => {
     expect(parseHelperMessage('{"type":"dropped","reason":"too-large"}')).toEqual({
       type: 'dropped',
@@ -213,6 +233,226 @@ process.stdin.on('end', () => process.exit(0));
       expect(logLines.join('\n')).not.toContain('cleanup engine'); // words from the copied text
     } finally {
       watcher.stop();
+    }
+  });
+
+  it('in manual mode, cleans only when the clean hotkey fires', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cleancopy-manual-'));
+    const outPath = join(dir, 'received.jsonl');
+
+    // Ready → a Safari copy (must vanish) → a terminal copy (must wait) →
+    // the clean hotkey. Argv is recorded so the hotkey flags are checkable.
+    const fakeHelper = join(dir, 'fake-helper.js');
+    writeFileSync(
+      fakeHelper,
+      `#!/usr/bin/env node
+const fs = require('fs');
+const text = ${JSON.stringify(wrappedProse)};
+fs.appendFileSync(${JSON.stringify(outPath)}, JSON.stringify({ argv: process.argv.slice(2) }) + '\\n');
+console.log(JSON.stringify({ type: 'ready' }));
+console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.apple.Safari', appName: 'Safari', text, changeCount: 4 }));
+console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.googlecode.iterm2', appName: 'iTerm2', text, changeCount: 5 }));
+setTimeout(() => console.log(JSON.stringify({ type: 'hotkey', id: 'clean' })), 150);
+process.stdin.on('data', (d) => fs.appendFileSync(${JSON.stringify(outPath)}, d));
+process.stdin.on('end', () => process.exit(0));
+`,
+    );
+    chmodSync(fakeHelper, 0o755);
+
+    const logLines: string[] = [];
+    const watcher = startWatcher({
+      helperPath: fakeHelper,
+      log: (l) => logLines.push(l),
+      mode: 'manual',
+      hotkeys: { clean: 'cmd+ctrl+c', revert: 'cmd+ctrl+z' },
+    });
+    try {
+      const deadline = Date.now() + 3000;
+      while (
+        !logLines.some((l) => l.startsWith('cleaned copy')) &&
+        Date.now() < deadline
+      ) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      const received = readFileSync(outPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+
+      // Both hotkeys were passed to the helper (manual mode registers both)...
+      expect(received[0].argv).toEqual([
+        '--hotkey', 'clean:cmd+ctrl+c',
+        '--hotkey', 'revert:cmd+ctrl+z',
+      ]);
+      // ...and exactly one write happened — for the terminal copy, only after
+      // the hotkey, pinned to that copy's changeCount.
+      expect(received.slice(1)).toEqual([
+        { type: 'write', text: clean(wrappedProse) + '\n', expectedChangeCount: 5 },
+      ]);
+
+      // The terminal copy was noted (with the hotkey to press) before it was
+      // cleaned; the Safari copy left no trace at all.
+      const noted = logLines.findIndex((l) => l.includes('terminal copy from iTerm2 noted'));
+      const cleaned = logLines.findIndex((l) => l.startsWith('cleaned copy from iTerm2'));
+      expect(noted).toBeGreaterThanOrEqual(0);
+      expect(cleaned).toBeGreaterThan(noted);
+      expect(logLines[noted]).toContain('press cmd+ctrl+c');
+      expect(logLines.join('\n')).not.toContain('Safari');
+    } finally {
+      watcher.stop();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('in auto mode, registers only the revert hotkey and reverts on it', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cleancopy-revert-'));
+    const outPath = join(dir, 'received.jsonl');
+
+    // A terminal copy is auto-cleaned; the wrote ack carries the changeCount
+    // the write produced (8); the revert hotkey then fires. The revert must
+    // write the ORIGINAL text pinned to that post-clean changeCount.
+    const fakeHelper = join(dir, 'fake-helper.js');
+    writeFileSync(
+      fakeHelper,
+      `#!/usr/bin/env node
+const fs = require('fs');
+const readline = require('readline');
+const text = ${JSON.stringify(wrappedProse)};
+fs.appendFileSync(${JSON.stringify(outPath)}, JSON.stringify({ argv: process.argv.slice(2) }) + '\\n');
+console.log(JSON.stringify({ type: 'ready' }));
+console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.googlecode.iterm2', appName: 'iTerm2', text, changeCount: 7 }));
+let writes = 0;
+readline.createInterface({ input: process.stdin }).on('line', (line) => {
+  fs.appendFileSync(${JSON.stringify(outPath)}, line + '\\n');
+  if (JSON.parse(line).type !== 'write') return;
+  writes += 1;
+  console.log(JSON.stringify({ type: 'wrote', changeCount: 7 + writes }));
+  if (writes === 1) console.log(JSON.stringify({ type: 'hotkey', id: 'revert' }));
+});
+process.stdin.on('end', () => process.exit(0));
+`,
+    );
+    chmodSync(fakeHelper, 0o755);
+
+    const logLines: string[] = [];
+    const watcher = startWatcher({
+      helperPath: fakeHelper,
+      log: (l) => logLines.push(l),
+      mode: 'auto',
+      hotkeys: { clean: 'cmd+ctrl+c', revert: 'cmd+ctrl+z' },
+    });
+    try {
+      const deadline = Date.now() + 3000;
+      while (
+        !logLines.some((l) => l.startsWith('reverted')) &&
+        Date.now() < deadline
+      ) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      const received = readFileSync(outPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+
+      // Auto mode has no use for the clean hotkey; only revert is registered.
+      expect(received[0].argv).toEqual(['--hotkey', 'revert:cmd+ctrl+z']);
+      expect(received.slice(1)).toEqual([
+        { type: 'write', text: clean(wrappedProse) + '\n', expectedChangeCount: 7 },
+        { type: 'write', text: wrappedProse, expectedChangeCount: 8 },
+      ]);
+      expect(logLines.join('\n')).toContain('reverted: the clipboard holds the original copy again');
+    } finally {
+      watcher.stop();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does nothing on hotkeys with nothing to act on', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cleancopy-hotkey-idle-'));
+    const outPath = join(dir, 'received.jsonl');
+
+    const fakeHelper = join(dir, 'fake-helper.js');
+    writeFileSync(
+      fakeHelper,
+      `#!/usr/bin/env node
+const fs = require('fs');
+console.log(JSON.stringify({ type: 'ready' }));
+console.log(JSON.stringify({ type: 'hotkey', id: 'clean' }));
+console.log(JSON.stringify({ type: 'hotkey', id: 'revert' }));
+process.stdin.on('data', (d) => fs.appendFileSync(${JSON.stringify(outPath)}, d));
+process.stdin.on('end', () => process.exit(0));
+`,
+    );
+    chmodSync(fakeHelper, 0o755);
+
+    const logLines: string[] = [];
+    const watcher = startWatcher({
+      helperPath: fakeHelper,
+      log: (l) => logLines.push(l),
+      mode: 'manual',
+      hotkeys: { clean: 'cmd+ctrl+c', revert: 'cmd+ctrl+z' },
+    });
+    try {
+      const deadline = Date.now() + 3000;
+      while (
+        !logLines.some((l) => l.includes('no cleaned copy to revert')) &&
+        Date.now() < deadline
+      ) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      expect(logLines.join('\n')).toContain('no terminal copy to clean');
+      expect(logLines.join('\n')).toContain('no cleaned copy to revert');
+      expect(existsSync(outPath)).toBe(false); // not a single write
+    } finally {
+      watcher.stop();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('forgets the revertible original once a newer copy lands', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cleancopy-revert-expired-'));
+    const outPath = join(dir, 'received.jsonl');
+
+    // Clean a terminal copy, then let ANY new copy land (here a non-terminal
+    // one), then press revert: the original belongs to a clipboard state
+    // that no longer exists, so nothing may be written.
+    const fakeHelper = join(dir, 'fake-helper.js');
+    writeFileSync(
+      fakeHelper,
+      `#!/usr/bin/env node
+const fs = require('fs');
+const readline = require('readline');
+const text = ${JSON.stringify(wrappedProse)};
+console.log(JSON.stringify({ type: 'ready' }));
+console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.googlecode.iterm2', appName: 'iTerm2', text, changeCount: 7 }));
+readline.createInterface({ input: process.stdin }).on('line', (line) => {
+  fs.appendFileSync(${JSON.stringify(outPath)}, line + '\\n');
+  if (JSON.parse(line).type !== 'write') return;
+  console.log(JSON.stringify({ type: 'wrote', changeCount: 8 }));
+  console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.apple.Safari', appName: 'Safari', text: 'something else', changeCount: 9 }));
+  console.log(JSON.stringify({ type: 'hotkey', id: 'revert' }));
+});
+process.stdin.on('end', () => process.exit(0));
+`,
+    );
+    chmodSync(fakeHelper, 0o755);
+
+    const logLines: string[] = [];
+    const watcher = startWatcher({
+      helperPath: fakeHelper,
+      log: (l) => logLines.push(l),
+      hotkeys: { revert: 'cmd+ctrl+z' },
+    });
+    try {
+      const deadline = Date.now() + 3000;
+      while (
+        !logLines.some((l) => l.includes('no cleaned copy to revert')) &&
+        Date.now() < deadline
+      ) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      const received = readFileSync(outPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+      // Only the clean was written; the revert press wrote nothing.
+      expect(received).toEqual([
+        { type: 'write', text: clean(wrappedProse) + '\n', expectedChangeCount: 7 },
+      ]);
+    } finally {
+      watcher.stop();
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 

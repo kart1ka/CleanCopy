@@ -86,7 +86,10 @@ describe.skipIf(!helperPath)('cleancopy-helper (integration, private pasteboard)
     await writer.waitFor((m) => m.type === 'ready');
 
     writer.send({ type: 'write', text: 'wrapped line one\nwrapped line two\n' });
-    await writer.waitFor((m) => m.type === 'wrote');
+    // The ack names the changeCount the write produced — what Node pins a
+    // later revert to.
+    const wrote = await writer.waitFor((m) => m.type === 'wrote');
+    expect(wrote).toMatchObject({ type: 'wrote', changeCount: expect.any(Number) });
 
     // The other instance sees the change, text intact (an external change to
     // this pasteboard is indistinguishable from a copy)...
@@ -166,6 +169,22 @@ describe.skipIf(!helperPath)('cleancopy-helper (integration, private pasteboard)
     // A copy within the cap still flows normally afterwards.
     writer.send({ type: 'write', text: 'small enough copy' });
     await observer.waitFor((m) => m.type === 'clipboard' && m.text === 'small enough copy');
+  });
+
+  it('refuses an invalid hotkey combo at startup (exit 2)', async () => {
+    // Node validates combos before passing them, so an invalid one reaching
+    // the helper is a caller bug: fail loudly, not half-configured.
+    const helper = launch(`cleancopy-test-${process.pid}-bad-hotkey`, [
+      '--hotkey', 'clean:definitely-not-a-key',
+    ]);
+    expect(await helper.exited).toBe(2);
+  });
+
+  it('refuses a malformed --hotkey argument (exit 2)', async () => {
+    const helper = launch(`cleancopy-test-${process.pid}-bad-hotkey-arg`, [
+      '--hotkey', 'no-colon-here',
+    ]);
+    expect(await helper.exited).toBe(2);
   });
 
   it('exits cleanly when its stdin closes (Node side gone)', async () => {

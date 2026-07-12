@@ -20,10 +20,14 @@ export interface ClipboardEvent {
 export type HelperMessage =
   | ClipboardEvent
   | { type: 'ready' }
-  | { type: 'wrote' }
+  // Ack of a write. changeCount is the pasteboard count the write produced —
+  // the revert flow echoes it back so a revert can never clobber a newer copy.
+  | { type: 'wrote'; changeCount?: number }
   | { type: 'write-failed' }
   | { type: 'stale' } // a write was skipped because the pasteboard had moved on
   | { type: 'dropped'; reason: string } // a copy withheld at the transport (content-free)
+  | { type: 'hotkey'; id: string } // a registered global hotkey was pressed
+  | { type: 'hotkey-failed'; id: string } // combo taken by another app; not registered
   | { type: 'pong' };
 
 export type NodeMessage =
@@ -42,13 +46,21 @@ export function parseHelperMessage(line: string): HelperMessage | null {
   const msg = value as Record<string, unknown>;
   switch (msg.type) {
     case 'ready':
-    case 'wrote':
     case 'write-failed':
     case 'stale':
     case 'pong':
       return { type: msg.type };
+    case 'wrote':
+      return {
+        type: 'wrote',
+        ...(typeof msg.changeCount === 'number' ? { changeCount: msg.changeCount } : {}),
+      };
     case 'dropped':
       return { type: 'dropped', reason: typeof msg.reason === 'string' ? msg.reason : 'unknown' };
+    case 'hotkey':
+    case 'hotkey-failed':
+      if (typeof msg.id !== 'string') return null;
+      return { type: msg.type, id: msg.id };
     case 'clipboard':
       if (typeof msg.text !== 'string') return null;
       return {

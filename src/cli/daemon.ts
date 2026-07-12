@@ -1,7 +1,9 @@
 import { execFileSync, spawn } from 'child_process';
 import * as fs from 'fs';
 import {
+  configFilePath,
   ensureStateDir,
+  loadConfig,
   logFilePath,
   pidFilePath,
   resolveHelperBinary,
@@ -199,10 +201,23 @@ export function runForeground(): void {
   const log = (line: string) =>
     process.stdout.write(`${new Date().toISOString()} ${line}\n`);
 
+  // A broken config file downgrades to defaults with a logged warning; it
+  // must never keep the watcher from starting.
+  const { config, warnings } = loadConfig();
+  for (const warning of warnings) log(`config: ${warning}`);
+  log(
+    config.mode === 'manual'
+      ? `mode: manual — terminal copies are cleaned only on the hotkey (${config.hotkeys.clean ?? 'DISABLED'})`
+      : 'mode: auto — terminal copies are cleaned as they land',
+  );
+  if (config.hotkeys.revert) log(`revert hotkey: ${config.hotkeys.revert}`);
+
   const watcher = startWatcher({
     helperPath,
     log,
     pasteboard: process.env.CLEANCOPY_PASTEBOARD || undefined,
+    mode: config.mode,
+    hotkeys: config.hotkeys,
     onFatal: () => shutdown(1),
   });
 
@@ -311,6 +326,17 @@ export function status(): void {
   }
   process.stdout.write(`helper: ${helper}\n`);
   process.stdout.write(`log:    ${logFilePath()}\n`);
+
+  const { config } = loadConfig();
+  process.stdout.write(
+    config.mode === 'manual'
+      ? `mode:   manual — copies are cleaned only when you press ${config.hotkeys.clean ?? '(no hotkey set!)'}\n`
+      : 'mode:   auto — terminal copies are cleaned as they land\n',
+  );
+  process.stdout.write(
+    `revert: ${config.hotkeys.revert ? `press ${config.hotkeys.revert} to restore the last original` : 'off'}\n`,
+  );
+  process.stdout.write(`config: ${configFilePath()} (edit via \`cleancopy config\`)\n`);
 
   const installed = fs.existsSync(plistPath());
   const autostart = !installed

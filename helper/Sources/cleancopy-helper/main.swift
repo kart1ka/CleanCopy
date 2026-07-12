@@ -1,12 +1,14 @@
 import AppKit
+import Carbon.HIToolbox
 import Foundation
 
 // cleancopy-helper — the tiny native side of CleanCopy.
 //
 // It does only what must be done natively: watch a pasteboard for changes,
-// report which app is frontmost, and read/write plain text. All judgement
-// (is this a terminal? is this prose? what should the cleaned text be?)
-// lives in the Node process that spawns this binary.
+// report which app is frontmost, read/write plain text, and register global
+// hotkeys. All judgement (is this a terminal? is this prose? what should the
+// cleaned text be? what does a hotkey press mean right now?) lives in the
+// Node process that spawns this binary.
 //
 // macOS has no clipboard-change notification, so the helper polls
 // NSPasteboard.changeCount — an integer compare every `pollInterval`,
@@ -17,9 +19,11 @@ import Foundation
 //   helper -> node  {"type":"ready"}
 //   helper -> node  {"type":"clipboard","bundleId":"com.googlecode.iterm2",
 //                    "appName":"iTerm2","text":"...","changeCount":42}
-//   helper -> node  {"type":"wrote"}            ack of a write
+//   helper -> node  {"type":"wrote","changeCount":43}  ack of a write
 //   helper -> node  {"type":"stale"}            write skipped: pasteboard moved on
 //   helper -> node  {"type":"dropped","reason":"too-large"}  copy withheld (content-free)
+//   helper -> node  {"type":"hotkey","id":"revert"}     a --hotkey combo was pressed
+//   helper -> node  {"type":"hotkey-failed","id":"revert"}  combo taken by another app
 //   helper -> node  {"type":"pong"}             reply to ping
 //   node -> helper  {"type":"write","text":"...","expectedChangeCount":42}
 //   node -> helper  {"type":"ping"}
@@ -34,6 +38,7 @@ import Foundation
 var pasteboardName: NSPasteboard.Name? = nil
 var pollInterval: TimeInterval = 0.2
 var failNextWrite = false // deterministic integration-test hook
+var hotkeySpecs: [(id: String, spec: String)] = []
 
 // Transport guard only — the user-visible size policy (and its "too-large"
 // log line) lives in decide.ts. Measured in UTF-16 code units, the same
@@ -57,6 +62,19 @@ while argIndex < arguments.count {
     case "--max-text": // lower the transport cap; used by the integration tests
         argIndex += 1
         if argIndex < arguments.count { maxTextUTF16 = Int(arguments[argIndex]) ?? maxTextUTF16 }
+    case "--hotkey": // "<id>:<combo>", e.g. "clean:cmd+ctrl+c" — repeatable
+        argIndex += 1
+        if argIndex < arguments.count {
+            let value = arguments[argIndex]
+            guard let colon = value.firstIndex(of: ":"), colon != value.startIndex else {
+                FileHandle.standardError.write(Data("cleancopy-helper: --hotkey expects <id>:<combo>, got \(value)\n".utf8))
+                exit(2)
+            }
+            hotkeySpecs.append((
+                id: String(value[..<colon]),
+                spec: String(value[value.index(after: colon)...])
+            ))
+        }
     default:
         FileHandle.standardError.write(Data("cleancopy-helper: unknown argument \(arguments[argIndex])\n".utf8))
         exit(2)
@@ -80,6 +98,111 @@ func send(_ message: [String: Any]) {
     guard let data = try? JSONSerialization.data(withJSONObject: message) else { return }
     stdout.write(data)
     stdout.write(newlineData)
+}
+
+// --- global hotkeys ----------------------------------------------------------
+//
+// Carbon's RegisterEventHotKey is the one API that grabs a global hotkey
+// without Accessibility permission or an event tap. The combo grammar here
+// must accept everything normalizeHotkey() in src/watcher/config.ts emits;
+// keep the two tables in sync.
+
+let hotkeyKeyCodes: [String: UInt32] = [
+    "a": UInt32(kVK_ANSI_A), "b": UInt32(kVK_ANSI_B), "c": UInt32(kVK_ANSI_C),
+    "d": UInt32(kVK_ANSI_D), "e": UInt32(kVK_ANSI_E), "f": UInt32(kVK_ANSI_F),
+    "g": UInt32(kVK_ANSI_G), "h": UInt32(kVK_ANSI_H), "i": UInt32(kVK_ANSI_I),
+    "j": UInt32(kVK_ANSI_J), "k": UInt32(kVK_ANSI_K), "l": UInt32(kVK_ANSI_L),
+    "m": UInt32(kVK_ANSI_M), "n": UInt32(kVK_ANSI_N), "o": UInt32(kVK_ANSI_O),
+    "p": UInt32(kVK_ANSI_P), "q": UInt32(kVK_ANSI_Q), "r": UInt32(kVK_ANSI_R),
+    "s": UInt32(kVK_ANSI_S), "t": UInt32(kVK_ANSI_T), "u": UInt32(kVK_ANSI_U),
+    "v": UInt32(kVK_ANSI_V), "w": UInt32(kVK_ANSI_W), "x": UInt32(kVK_ANSI_X),
+    "y": UInt32(kVK_ANSI_Y), "z": UInt32(kVK_ANSI_Z),
+    "0": UInt32(kVK_ANSI_0), "1": UInt32(kVK_ANSI_1), "2": UInt32(kVK_ANSI_2),
+    "3": UInt32(kVK_ANSI_3), "4": UInt32(kVK_ANSI_4), "5": UInt32(kVK_ANSI_5),
+    "6": UInt32(kVK_ANSI_6), "7": UInt32(kVK_ANSI_7), "8": UInt32(kVK_ANSI_8),
+    "9": UInt32(kVK_ANSI_9),
+    "f1": UInt32(kVK_F1), "f2": UInt32(kVK_F2), "f3": UInt32(kVK_F3),
+    "f4": UInt32(kVK_F4), "f5": UInt32(kVK_F5), "f6": UInt32(kVK_F6),
+    "f7": UInt32(kVK_F7), "f8": UInt32(kVK_F8), "f9": UInt32(kVK_F9),
+    "f10": UInt32(kVK_F10), "f11": UInt32(kVK_F11), "f12": UInt32(kVK_F12),
+    "space": UInt32(kVK_Space), "tab": UInt32(kVK_Tab),
+    "return": UInt32(kVK_Return), "escape": UInt32(kVK_Escape),
+    "delete": UInt32(kVK_Delete),
+    "left": UInt32(kVK_LeftArrow), "right": UInt32(kVK_RightArrow),
+    "up": UInt32(kVK_UpArrow), "down": UInt32(kVK_DownArrow),
+]
+
+func parseHotkeyCombo(_ spec: String) -> (keyCode: UInt32, modifiers: UInt32)? {
+    var modifiers: UInt32 = 0
+    var keyCode: UInt32? = nil
+    for part in spec.lowercased().split(separator: "+").map(String.init) {
+        switch part {
+        case "cmd", "command": modifiers |= UInt32(cmdKey)
+        case "ctrl", "control": modifiers |= UInt32(controlKey)
+        case "alt", "option", "opt": modifiers |= UInt32(optionKey)
+        case "shift": modifiers |= UInt32(shiftKey)
+        default:
+            guard keyCode == nil, let code = hotkeyKeyCodes[part] else { return nil }
+            keyCode = code
+        }
+    }
+    guard modifiers != 0, let code = keyCode else { return nil }
+    return (code, modifiers)
+}
+
+// Which --hotkey id each registered EventHotKeyID.id number maps back to.
+var hotkeyIdsByNumber: [UInt32: String] = [:]
+// Kept only so the registrations live as long as the process.
+var hotkeyRefs: [EventHotKeyRef] = []
+
+func registerHotkeys() {
+    guard !hotkeySpecs.isEmpty else { return }
+
+    var pressed = EventTypeSpec(
+        eventClass: OSType(kEventClassKeyboard),
+        eventKind: UInt32(kEventHotKeyPressed)
+    )
+    // The handler is a C function pointer, so no captures — it reaches the
+    // id table through the globals above. It runs on the main thread, the
+    // same one the pasteboard timer and stdin handling use.
+    InstallEventHandler(
+        GetEventDispatcherTarget(),
+        { _, event, _ -> OSStatus in
+            var hotkeyID = EventHotKeyID()
+            let status = GetEventParameter(
+                event, EventParamName(kEventParamDirectObject),
+                EventParamType(typeEventHotKeyID), nil,
+                MemoryLayout<EventHotKeyID>.size, nil, &hotkeyID)
+            if status == noErr, let id = hotkeyIdsByNumber[hotkeyID.id] {
+                send(["type": "hotkey", "id": id])
+            }
+            return noErr
+        },
+        1, &pressed, nil, nil)
+
+    let signature = OSType(0x434C_4350)  // 'CLCP'
+    for (index, entry) in hotkeySpecs.enumerated() {
+        guard let combo = parseHotkeyCombo(entry.spec) else {
+            // Node validates combos before passing them, so this is a bug on
+            // the caller's side — fail loudly rather than run half-configured.
+            FileHandle.standardError.write(Data("cleancopy-helper: invalid hotkey combo \(entry.spec)\n".utf8))
+            exit(2)
+        }
+        let number = UInt32(index + 1)
+        var ref: EventHotKeyRef?
+        let status = RegisterEventHotKey(
+            combo.keyCode, combo.modifiers,
+            EventHotKeyID(signature: signature, id: number),
+            GetEventDispatcherTarget(), 0, &ref)
+        guard status == noErr, let registered = ref else {
+            // Another app owns this combo. Announce it and carry on: losing
+            // one hotkey must not take clipboard watching down with it.
+            send(["type": "hotkey-failed", "id": entry.id])
+            continue
+        }
+        hotkeyIdsByNumber[number] = entry.id
+        hotkeyRefs.append(registered)
+    }
 }
 
 // --- pasteboard polling ----------------------------------------------------
@@ -154,7 +277,9 @@ func handle(line: Data) {
         }
         ownWriteChangeCount = pasteboard.changeCount
         lastSeenChangeCount = pasteboard.changeCount
-        send(["type": "wrote"])
+        // The count this write produced: Node pins any later revert to it so
+        // a revert can never overwrite a copy that landed in between.
+        send(["type": "wrote", "changeCount": pasteboard.changeCount])
     case "ping":
         send(["type": "pong"])
     default:
@@ -187,5 +312,6 @@ stdinQueue.async {
 let timer = Timer(timeInterval: pollInterval, repeats: true) { _ in pollPasteboard() }
 RunLoop.main.add(timer, forMode: .common)
 
+registerHotkeys()
 send(["type": "ready"])
 RunLoop.main.run()
