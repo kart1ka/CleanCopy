@@ -67,6 +67,38 @@ describe('cleanup engine — properties', () => {
   });
 });
 
+describe('trace keywords freeze blocks only in log-line position', () => {
+  it('leaves bracketed log-level lines verbatim', () => {
+    const log = '[ERROR] connection refused\n[WARN] retrying in 5s';
+    expect(clean(log)).toBe(log);
+  });
+
+  it('leaves line-leading log levels verbatim', () => {
+    const log = 'ERROR connection refused after three attempts and\nWARN retrying in five seconds';
+    expect(clean(log)).toBe(log);
+  });
+
+  it('leaves timestamp-prefixed log levels verbatim', () => {
+    const log = '12:00:01 ERROR could not reach the host on the\n12:00:02 TRACE giving up until the next retry';
+    expect(clean(log)).toBe(log);
+  });
+
+  it('leaves exception headers verbatim', () => {
+    const log = 'java.lang.NullPointerException: boom went the\nservice before it could finish the request';
+    expect(clean(log)).toBe(log);
+    const thread = 'Exception in thread "main" something quite long\nhappened before the stack frames were printed';
+    expect(clean(thread)).toBe(thread);
+  });
+
+  it('reflows prose that merely mentions a log level mid-sentence', () => {
+    expect(
+      clean('When the build breaks you will find a WARNING in the\noutput and a summary right at the very end of it.'),
+    ).toBe(
+      'When the build breaks you will find a WARNING in the output and a summary right at the very end of it.',
+    );
+  });
+});
+
 describe('terminal escape sequences are stripped', () => {
   const ESC = '\u001B';
   const BEL = '\u0007';

@@ -130,12 +130,26 @@ function looksLikeTable(lines: string[]): boolean {
   return columnar >= 2;
 }
 
+// A log level only counts in log-line position: at the start of a line, or
+// after a prefix that contains no lowercase text (timestamps, brackets, pids,
+// module names in caps). Prose that merely *mentions* ERROR or WARN — "you
+// will see an ERROR in the console" — must not freeze a block: a wrapped
+// explanation of a failure is exactly what CleanCopy exists to clean. The
+// other trace signals below are structural for the same reason.
+const LOG_LEVEL_LINE = /^[^a-z\n]*\b(?:ERROR|WARN|WARNING|DEBUG|TRACE|FATAL)\b/m;
+// An exception in log position: a (possibly package-qualified) exception name
+// opening the line and ending it or introducing a message, or Java's classic
+// "Exception in thread ..." first line.
+const EXCEPTION_LINE =
+  /^\s*(?:[\w$]+(?:\.[\w$]+)*\.)?\w*Exception(?::|$)|^\s*Exception in thread\b/m;
+
 function looksLikeTrace(text: string): boolean {
   return (
     /^\s*Traceback/m.test(text) ||
     /^\s*at\s+\S/m.test(text) ||
     /File\s+".*",\s+line\s+\d+/.test(text) ||
-    /\b(ERROR|WARN|WARNING|DEBUG|TRACE|FATAL|Exception)\b/.test(text) ||
+    LOG_LEVEL_LINE.test(text) ||
+    EXCEPTION_LINE.test(text) ||
     /\b\w*Error:/.test(text) ||
     /\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(text) ||
     /\b0x[0-9a-fA-F]{4,}\b/.test(text)

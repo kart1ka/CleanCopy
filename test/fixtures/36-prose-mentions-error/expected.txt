@@ -1,0 +1,1 @@
+If the deploy fails you will see an ERROR in the console and should check the logs before retrying.
