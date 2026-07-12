@@ -39,10 +39,9 @@ export function decide(
   if (event.text.trim() === '') return { action: 'ignore', reason: 'empty' };
   if (event.text.length > MAX_TEXT_LENGTH) return { action: 'ignore', reason: 'too-large' };
 
-  // A terminal copy usually ends with a newline; keep it, so the only
+  // clean() preserves the input's trailing-newline state, so the only
   // difference we ever write back is a real cleanup, not newline churn.
-  const cleaned = clean(event.text);
-  const output = event.text.endsWith('\n') ? cleaned + '\n' : cleaned;
+  const output = clean(event.text);
   if (output === event.text) return { action: 'ignore', reason: 'already-clean' };
 
   const before = countLines(event.text);

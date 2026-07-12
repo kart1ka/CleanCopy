@@ -31,6 +31,11 @@ export function clean(input: string): string {
 /** Like {@link clean}, but also returns the per-block classifications. */
 export function cleanWithReport(input: string, options: CleanOptions = {}): CleanResult {
   const normalized = normalize(input);
+  // The trailing-newline contract lives here, not in each caller: the output
+  // ends with a single newline exactly when the input did, so cleaning never
+  // churns a final newline and every consumer (watcher, CLI) sees the same
+  // bytes for the same text.
+  const endsWithNewline = normalized.endsWith('\n');
   const blocks = segment(normalized);
   const classifications = blocks.map((block) => classify(block));
 
@@ -68,13 +73,14 @@ export function cleanWithReport(input: string, options: CleanOptions = {}): Clea
     return { block, classification, output, joins };
   });
 
-  const text = reports
+  const stitched = reports
     .map((r, i) =>
       i === 0 ? r.output : '\n'.repeat(r.block.blankLinesBefore + 1) + r.output,
     )
     .join('')
     .replace(/[ \t]+$/gm, '') // belt-and-braces trailing trim
     .replace(/^\n+|\n+$/g, ''); // no leading / trailing blank lines
+  const text = stitched.length > 0 && endsWithNewline ? stitched + '\n' : stitched;
 
   return { text, reports, inferredWidth };
 }

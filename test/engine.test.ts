@@ -19,15 +19,12 @@ function read(name: string, file: string): string {
   return readFileSync(join(fixturesDir, name, file), 'utf8');
 }
 
-/** Fixture files carry a trailing newline from the editor; clean() does not. */
-function stripFinalNewline(s: string): string {
-  return s.replace(/\n$/, '');
-}
-
 describe('cleanup engine — fixtures', () => {
+  // Byte-for-byte: input.txt and expected.txt both end with a newline, and
+  // clean() preserves the input's trailing-newline state.
   for (const name of cases) {
     it(name, () => {
-      expect(clean(read(name, 'input.txt'))).toBe(stripFinalNewline(read(name, 'expected.txt')));
+      expect(clean(read(name, 'input.txt'))).toBe(read(name, 'expected.txt'));
     });
   }
 });
@@ -42,6 +39,13 @@ describe('cleanup engine — properties', () => {
 
   it('empty input stays empty', () => {
     expect(clean('')).toBe('');
+    expect(clean('\n\n')).toBe('');
+  });
+
+  it('preserves the presence and absence of a final newline', () => {
+    expect(clean('word another word\n')).toBe('word another word\n');
+    expect(clean('word another word')).toBe('word another word');
+    expect(clean('word another word\n\n\n')).toBe('word another word\n');
   });
 
   it('keeps the indent of an isolated nested-list fragment', () => {

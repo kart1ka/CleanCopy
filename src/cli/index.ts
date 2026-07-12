@@ -75,8 +75,10 @@ async function main(): Promise<void> {
       process.stderr.write('\n');
     }
 
+    // Byte-faithful: clean() preserves the input's trailing-newline state, so
+    // the pbpaste | cleancopy clean | pbcopy round-trip is exactly what the
+    // watcher would write — no newline added to already-clean content.
     process.stdout.write(text);
-    if (text.length > 0) process.stdout.write('\n');
     return;
   }
 

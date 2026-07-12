@@ -48,7 +48,7 @@ describe('decide — the watcher policy', () => {
     const decision = decide({ bundleId: TERMINAL, text: wrappedProse });
     expect(decision.action).toBe('write');
     if (decision.action === 'write') {
-      expect(decision.text).toBe(clean(wrappedProse) + '\n');
+      expect(decision.text).toBe(clean(wrappedProse));
       // The summary is content-free: line counts only.
       expect(decision.summary).toMatch(/^\d+ lines -> \d+$/);
       expect(decision.summary).not.toContain('cleanup engine');
@@ -203,7 +203,7 @@ process.stdin.on('end', () => process.exit(0));
       // Exactly one write — for the terminal copy, with the engine's output,
       // echoing the event's changeCount so the helper can refuse stale writes.
       expect(received).toEqual([
-        { type: 'write', text: clean(wrappedProse) + '\n', expectedChangeCount: 7 },
+        { type: 'write', text: clean(wrappedProse), expectedChangeCount: 7 },
       ]);
 
       // The log knows what happened but never what the text was — and the
