@@ -1,0 +1,69 @@
+name: Incorrect cleanup
+description: Report text that CleanCopy changed incorrectly or failed to clean.
+title: "[Cleanup]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping make CleanCopy safer. Use synthetic text only—never paste passwords, tokens, private messages, customer data, or other sensitive clipboard contents.
+  - type: input
+    id: version
+    attributes:
+      label: CleanCopy version
+      description: Run `cleancopy --version`.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: macOS, Node.js, and terminal
+      description: Include the macOS version, `node --version`, and terminal name.
+      placeholder: "macOS 15.6, Node v22.23.1, iTerm2"
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: CleanCopy mode
+      options:
+        - Automatic watcher
+        - Manual hotkey
+        - One-time `cleancopy clean`
+    validations:
+      required: true
+  - type: textarea
+    id: input
+    attributes:
+      label: Synthetic input
+      description: Provide the smallest non-sensitive example that reproduces the problem.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: explanation
+    attributes:
+      label: Explanation output
+      description: If possible, include stderr from `cleancopy clean --explain` using the same synthetic input.
+      render: text
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: I have removed all private or sensitive clipboard data from this report.
+          required: true

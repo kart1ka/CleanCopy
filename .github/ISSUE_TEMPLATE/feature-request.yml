@@ -1,0 +1,34 @@
+name: Feature request
+description: Suggest a focused improvement to the existing macOS CLI.
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        CleanCopy is intentionally a local, privacy-first macOS CLI. Explain the concrete terminal-copy problem before proposing a solution.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What terminal-copy workflow is difficult today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed improvement
+      description: Describe the smallest change that would solve the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: How do you handle this today?
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope confirmation
+      options:
+        - label: This request keeps clipboard processing local and does not require clipboard history or cloud processing.
+          required: true
