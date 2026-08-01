@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { cleanWithReport } from '../engine';
+import { configCommand } from './config';
 import { install, runForeground, start, status, stop, uninstall } from './daemon';
 
 // The CLI has two faces: `clean` pipes text through the engine once (the
@@ -16,6 +17,7 @@ Usage:
   cleancopy install              start automatically at login (launchd)
   cleancopy uninstall            stop starting automatically at login
   cleancopy run                  run the watcher in the foreground (debugging)
+  cleancopy config               view or change settings (see below)
   cleancopy --help               show this help
 
 Examples:
@@ -24,6 +26,14 @@ Examples:
 
 --explain prints, per block, what it was judged to be and why (to stderr),
 so the cleaned text on stdout stays pipeable.
+
+Settings (cleancopy config …):
+  mode auto|manual               auto (default) cleans every terminal copy;
+                                 manual cleans only when the clean hotkey
+                                 (default cmd+ctrl+c) is pressed after a copy
+  hotkey clean <combo>|off       the manual-clean hotkey
+  hotkey revert <combo>|off      pressing it (default cmd+ctrl+z) after a
+                                 clean puts the original copy back
 
 The watcher cleans terminal copies automatically. Everything stays on this
 machine; the event log (~/.cleancopy/cleancopy.log) records only events like
@@ -104,6 +114,10 @@ async function main(): Promise<void> {
   }
   if (command === 'uninstall') {
     uninstall();
+    return;
+  }
+  if (command === 'config') {
+    configCommand(args.slice(1));
     return;
   }
 
