@@ -13,7 +13,7 @@ both Apple Silicon and Intel Macs, plus a pure TypeScript cleanup engine.
 ## Requirements
 
 - macOS 12 (Monterey) or later
-- Node.js 18 or later
+- Node.js 22 or later
 
 The automatic clipboard watcher is macOS-only. The package refuses installation
 on other operating systems rather than installing a command that cannot work.
@@ -24,10 +24,12 @@ on other operating systems rather than installing a command that cannot work.
 npm install --global cleancopy
 ```
 
-Confirm that the native helper is available:
+Confirm the installed version and check that the native helper, configuration,
+and state directory are ready:
 
 ```bash
-cleancopy status
+cleancopy --version
+cleancopy doctor
 ```
 
 ## Use it
@@ -55,15 +57,45 @@ cleancopy stop      # stop the background watcher
 With the watcher running, copies made while a supported terminal is frontmost
 are cleaned in place. Copy, then paste as usual.
 
+The default `auto` mode cleans eligible terminal copies as they land. To clean
+only when you ask, switch to `manual` mode and use the clean hotkey:
+
+```bash
+cleancopy config mode manual
+cleancopy config hotkey clean cmd+ctrl+c
+cleancopy config hotkey revert cmd+ctrl+z
+cleancopy stop && cleancopy start # apply changed settings
+```
+
+The revert hotkey restores the original text only when the cleaned copy is
+still current; it never overwrites a newer clipboard item. Run `cleancopy
+config` to see the active mode and hotkeys. Use `off` in place of a key
+combination to disable either hotkey.
+
 To start CleanCopy automatically when you log in:
 
 ```bash
 cleancopy install
-cleancopy uninstall # remove login autostart later
+cleancopy stop --disable-autostart # stop and remove login autostart later
 ```
 
 `cleancopy run` starts the watcher in the foreground and prints event lines;
 it is useful when debugging. `cleancopy --help` lists every command.
+
+## Uninstall
+
+Remove the background process, login autostart, and global npm package:
+
+```bash
+cleancopy stop --disable-autostart
+npm uninstall --global cleancopy
+```
+
+Plain `cleancopy stop` stops the current watcher but keeps login autostart, so
+it can start again after your next login. The `--disable-autostart` option also
+removes that login configuration. Your settings and the content-free event log
+remain in `~/.cleancopy`; delete that directory yourself if you do not want to
+keep them.
 
 ## Safety and privacy
 
@@ -104,8 +136,7 @@ The golden rule is simple: when unsure, CleanCopy leaves a block unchanged.
 
 ## Development
 
-Developing and running the test suite requires Node.js 20 or later. The
-published CLI itself continues to support Node.js 18 or later.
+Developing, testing, and using the published CLI requires Node.js 22 or later.
 
 ```bash
 npm install
@@ -119,6 +150,9 @@ npm run release:check
 `release:check` builds the universal native helper, runs the full suite, and
 shows the exact npm tarball contents. The helper integration tests run after a
 helper build and use a private pasteboard, never your real clipboard.
+
+Security issues should be reported privately as described in
+[SECURITY.md](SECURITY.md).
 
 ## Contributing
 

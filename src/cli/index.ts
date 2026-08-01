@@ -1,7 +1,10 @@
 #!/usr/bin/env node
+import * as fs from 'fs';
+import * as path from 'path';
 import { cleanWithReport } from '../engine';
 import { configCommand } from './config';
-import { install, runForeground, start, status, stop, uninstall } from './daemon';
+import { install, runForeground, start, status, stop } from './daemon';
+import { doctor } from './doctor';
 
 // The CLI has two faces: `clean` pipes text through the engine once (the
 // dogfooding path), and start/stop/status/run manage the clipboard watcher —
@@ -13,11 +16,14 @@ Usage:
   cleancopy clean [--explain]    read text from stdin, print the cleaned text
   cleancopy start                start watching the clipboard (background)
   cleancopy stop                 stop the background watcher
+  cleancopy stop --disable-autostart
+                                 stop it and remove login autostart
   cleancopy status               is the watcher running?
+  cleancopy doctor               check whether this installation is ready
   cleancopy install              start automatically at login (launchd)
-  cleancopy uninstall            stop starting automatically at login
   cleancopy run                  run the watcher in the foreground (debugging)
   cleancopy config               view or change settings (see below)
+  cleancopy --version            show the installed version
   cleancopy --help               show this help
 
 Examples:
@@ -40,6 +46,28 @@ machine; the event log (~/.cleancopy/cleancopy.log) records only events like
 "cleaned copy from iTerm2", never clipboard contents.
 `;
 
+/** Read the version from the package that owns this CLI, in source or dist. */
+export function packageVersion(): string {
+  try {
+    const packagePath = path.resolve(__dirname, '..', '..', 'package.json');
+    const parsed: unknown = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+    if (typeof parsed === 'object' && parsed !== null) {
+      const version = (parsed as Record<string, unknown>).version;
+      if (typeof version === 'string' && version.length > 0) return version;
+    }
+  } catch {
+    // A damaged installation is reported as unknown instead of throwing a
+    // JSON or filesystem stack trace from the simplest diagnostic command.
+  }
+  return 'unknown';
+}
+
+export function parseStopArgs(args: string[]): { disableAutostart: boolean } {
+  const unknown = args.find((arg) => arg !== '--disable-autostart');
+  if (unknown) throw new Error(`Unknown stop option: ${unknown}`);
+  return { disableAutostart: args.includes('--disable-autostart') };
+}
+
 function readStdin(): Promise<string> {
   return new Promise((resolve) => {
     if (process.stdin.isTTY) return resolve('');
@@ -50,12 +78,17 @@ function readStdin(): Promise<string> {
   });
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0];
 
   if (!command || command === '--help' || command === '-h' || command === 'help') {
     process.stdout.write(HELP);
+    return;
+  }
+
+  if (command === '--version' || command === '-v' || command === 'version') {
+    process.stdout.write(`${packageVersion()}\n`);
     return;
   }
 
@@ -101,19 +134,27 @@ async function main(): Promise<void> {
     return;
   }
   if (command === 'stop') {
-    await stop();
+    let options: { disableAutostart: boolean };
+    try {
+      options = parseStopArgs(args.slice(1));
+    } catch (err) {
+      process.stderr.write(`${(err as Error).message}\n\n${HELP}`);
+      process.exitCode = 1;
+      return;
+    }
+    await stop(options);
     return;
   }
   if (command === 'status') {
     status();
     return;
   }
-  if (command === 'install') {
-    await install();
+  if (command === 'doctor') {
+    process.exitCode = doctor(packageVersion());
     return;
   }
-  if (command === 'uninstall') {
-    uninstall();
+  if (command === 'install') {
+    await install();
     return;
   }
   if (command === 'config') {
@@ -125,4 +166,6 @@ async function main(): Promise<void> {
   process.exit(1);
 }
 
-main();
+if (require.main === module) {
+  void main();
+}

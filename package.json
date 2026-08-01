@@ -1,6 +1,6 @@
 {
   "name": "cleancopy",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "Cleans up text copied from the terminal so it pastes neatly into other apps.",
   "license": "MIT",
   "repository": {
@@ -22,18 +22,21 @@
   "bin": {
     "cleancopy": "dist/cli/index.js"
   },
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
   "files": [
-    "dist",
+    "dist/**/*.js",
+    "dist/**/*.js.map",
     "helper/bin"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "os": [
     "darwin"
   ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "scripts": {
     "build": "tsc",
     "build:helper": "swift build -c release --package-path helper && mkdir -p helper/bin && cp helper/.build/release/cleancopy-helper helper/bin/",

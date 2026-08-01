@@ -6,9 +6,9 @@ import { logFilePath } from '../watcher';
 
 // The launchd mechanics behind autostart: rendering the LaunchAgent plist and
 // loading/unloading it with launchctl. Deliberately free of any daemon import
-// so the dependency runs one way (daemon → launchagent); the `install` /
-// `uninstall` commands that orchestrate this live with the other lifecycle
-// commands in daemon.ts.
+// so the dependency runs one way (daemon → launchagent); `install` and
+// `stop --disable-autostart` orchestrate this with the other lifecycle commands
+// in daemon.ts.
 
 export const LAUNCH_AGENT_LABEL = 'com.cleancopy';
 

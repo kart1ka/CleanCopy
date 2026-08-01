@@ -1,7 +1,7 @@
 // Shared types for the cleanup engine.
 //
 // The engine is pure: text in, text out. Nothing here knows about clipboards,
-// macOS, or the filesystem — that keeps it testable in isolation and reusable.
+// macOS, or the filesystem — that keeps the CLI's core logic testable in isolation.
 
 /** What a single block of text was judged to be. */
 export type BlockType =

@@ -273,7 +273,7 @@ export async function start(): Promise<void> {
   process.exit(1);
 }
 
-export async function stop(): Promise<void> {
+async function stopWatcher(): Promise<void> {
   // One validated read: pid and identity always come from the same record,
   // and every deletion below re-checks the file still holds that record.
   const record = runningRecord();
@@ -309,6 +309,25 @@ export async function stop(): Promise<void> {
     // Already gone.
   }
   removePidFileIfMatches(record);
+}
+
+export interface StopOptions {
+  /** Also remove the launch agent so CleanCopy stays stopped after login. */
+  disableAutostart?: boolean;
+}
+
+/** Stop now, optionally making that choice persistent across future logins. */
+export async function stop(options: StopOptions = {}): Promise<void> {
+  await stopWatcher();
+  if (!options.disableAutostart) return;
+
+  ensureDarwin();
+  const existed = removePlist();
+  process.stdout.write(
+    existed
+      ? 'autostart disabled; cleancopy will stay stopped after login\n'
+      : 'autostart was already disabled\n',
+  );
 }
 
 export function status(): void {
@@ -373,16 +392,5 @@ export async function install(): Promise<void> {
   process.stdout.write(
     `note: autostart is pinned to this Node binary:\n        ${process.execPath}\n` +
       '      If you upgrade or switch Node (e.g. via nvm/fnm), re-run `cleancopy install`.\n',
-  );
-}
-
-/** Remove the launchd LaunchAgent so the watcher no longer starts at login. */
-export function uninstall(): void {
-  ensureDarwin();
-  const existed = removePlist();
-  process.stdout.write(
-    existed
-      ? 'cleancopy will no longer start automatically.\n'
-      : 'autostart was not installed.\n',
   );
 }
