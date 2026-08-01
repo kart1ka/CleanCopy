@@ -24,7 +24,6 @@
   },
   "files": [
     "dist/**/*.js",
-    "dist/**/*.js.map",
     "helper/bin"
   ],
   "engines": {
@@ -38,10 +37,12 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "tsc",
+    "clean:dist": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean:dist && tsc",
     "build:helper": "swift build -c release --package-path helper && mkdir -p helper/bin && cp helper/.build/release/cleancopy-helper helper/bin/",
     "build:helper:universal": "swift build -c release --arch arm64 --arch x86_64 --package-path helper && mkdir -p helper/bin && cp helper/.build/apple/Products/Release/cleancopy-helper helper/bin/",
-    "prepublishOnly": "npm run build && npm run build:helper:universal && npm test",
+    "verify:helper:universal": "/usr/bin/lipo helper/bin/cleancopy-helper -verify_arch arm64 x86_64",
+    "prepublishOnly": "npm run build && npm run build:helper:universal && npm run verify:helper:universal && npm test",
     "release:check": "npm run prepublishOnly && npm pack --dry-run",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
