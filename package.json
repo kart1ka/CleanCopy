@@ -51,7 +51,7 @@
     "dev": "tsx src/cli/index.ts"
   },
   "devDependencies": {
-    "@types/node": "^20.11.0",
+    "@types/node": "^22.0.0",
     "tsx": "^4.7.0",
     "typescript": "^5.4.0",
     "vitest": "^4.1.10"
