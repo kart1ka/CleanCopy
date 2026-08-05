@@ -267,9 +267,12 @@ process.stdin.on('end', () => process.exit(0));
       hotkeys: { clean: 'cmd+ctrl+c', revert: 'cmd+ctrl+z' },
     });
     try {
+      // Wait on the received file, not the log: "cleaned copy" is logged when
+      // the watcher *sends* the write, but the fake helper appends it to the
+      // file from another process, so the log can lead the file.
       const deadline = Date.now() + 3000;
       while (
-        !logLines.some((l) => l.startsWith('cleaned copy')) &&
+        !(existsSync(outPath) && readFileSync(outPath, 'utf8').includes('"type":"write"')) &&
         Date.now() < deadline
       ) {
         await new Promise((r) => setTimeout(r, 25));
