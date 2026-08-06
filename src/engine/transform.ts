@@ -174,7 +174,13 @@ function reflowParagraph(lines: string[], ctx: TransformContext = {}): string {
   }
   // Collapse runs of spaces, but only after the first non-space character so
   // a kept line's leading indent (e.g. an indented attribution) survives.
-  return out.map(l => l.replace(/(\S) {2,}/g, '$1 ').trimEnd()).join('\n');
+  // Then strip the margin the output lines still share: joining can leave the
+  // first line's private indent as the whole block's margin (e.g. a two-line
+  // block whose indented first line swallowed the only other line), and a
+  // second clean() would strip it in normalize — doing it here keeps
+  // clean(clean(x)) === clean(x). Relative indent (the attribution above)
+  // survives, exactly as it does in normalize.
+  return stripCommonMargin(out.map(l => l.replace(/(\S) {2,}/g, '$1 ').trimEnd()).join('\n'));
 }
 
 /** Decide whether the break between prev and next was a soft wrap. */

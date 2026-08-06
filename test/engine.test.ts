@@ -43,6 +43,18 @@ describe('cleanup engine — properties', () => {
     });
   }
 
+  it('is idempotent when an indented first line swallows its whole block', () => {
+    // Joining leaves the first line's private indent as the block's margin;
+    // a second clean() would strip it in normalize, so the reflow must strip
+    // it itself or clean(clean(x)) !== clean(x).
+    const input =
+      '    The first line of this paragraph is indented more than the rest\n' +
+      'and the second line continues the sentence out to a similar width\n';
+    const once = clean(input);
+    expect(once.startsWith(' ')).toBe(false);
+    expect(clean(once)).toBe(once);
+  });
+
   it('empty input stays empty', () => {
     expect(clean('')).toBe('');
     expect(clean('\n\n')).toBe('');
