@@ -167,5 +167,11 @@ export async function main(): Promise<void> {
 }
 
 if (require.main === module) {
-  void main();
+  // A thrown startup error (e.g. the helper binary missing from a broken
+  // install) must surface as its one-line message, not an unhandled-rejection
+  // stack trace — this is the first thing a user with a broken install sees.
+  main().catch((err: unknown) => {
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+    process.exitCode = 1;
+  });
 }

@@ -6,7 +6,12 @@ import * as path from 'path';
 // events only — never clipboard text.
 
 export function stateDir(): string {
-  return process.env.CLEANCOPY_STATE_DIR ?? path.join(os.homedir(), '.cleancopy');
+  const override = process.env.CLEANCOPY_STATE_DIR;
+  // Resolve a relative override once, here: left verbatim, each command would
+  // resolve it against its own cwd — `start` in one directory, `stop` in
+  // another, and the pid file silently lands in two different places (worse
+  // under launchd, whose cwd is `/`).
+  return override ? path.resolve(override) : path.join(os.homedir(), '.cleancopy');
 }
 
 export function ensureStateDir(): string {

@@ -91,6 +91,16 @@ export function configCommand(args: string[]): void {
     if (!combo) fail('missing hotkey combo (or "off")');
     if (combo === 'off') {
       config.hotkeys[which] = null;
+      // The mode-manual transition prints this same warning; repeat it here
+      // because disabling the clean hotkey WHILE IN manual mode is the other
+      // road into the same dead end (auto cleaning off by mode, manual
+      // cleaning off by hotkey — nothing will trigger a clean).
+      if (which === 'clean' && config.mode === 'manual') {
+        process.stdout.write(
+          'note: manual mode has no clean hotkey set — nothing will trigger a clean.\n' +
+            '      Set one with: cleancopy config hotkey clean <combo>\n',
+        );
+      }
     } else {
       try {
         config.hotkeys[which] = normalizeHotkey(combo);

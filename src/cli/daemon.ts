@@ -190,9 +190,18 @@ export function runForeground(): void {
   } catch (err) {
     failStartup(`${err instanceof Error ? err.message : String(err)}\n`);
   }
-  ensureStateDir();
 
-  const claimed = claimPidFile();
+  // An unwritable or invalid state dir is as unfixable-by-relaunch as a
+  // missing helper: outside failStartup it would escape as an uncaught throw
+  // (exit 1), which under the launch agent's KeepAlive means being relaunched
+  // into the same failure forever.
+  let claimed: PidRecord | null;
+  try {
+    ensureStateDir();
+    claimed = claimPidFile();
+  } catch (err) {
+    failStartup(`${err instanceof Error ? err.message : String(err)}\n`);
+  }
   if (claimed === null) {
     failStartup(`cleancopy is already running (pid ${runningPid() ?? 'unknown'})\n`);
   }
