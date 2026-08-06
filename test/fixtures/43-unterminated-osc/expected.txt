@@ -1,0 +1,2 @@
+Build finished in 3.2s
+All twelve tests passed without any failures

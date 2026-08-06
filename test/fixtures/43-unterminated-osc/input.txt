@@ -1,0 +1,2 @@
+Build finished in 3.2s]0;title set by the build script
+All twelve tests passed without any failures

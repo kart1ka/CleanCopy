@@ -1,0 +1,6 @@
+- name: Check out the repository
+  uses: actions/checkout@v4
+- name: Install project dependencies
+  run: npm ci
+- name: Run the whole test suite
+  run: npm test

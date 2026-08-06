@@ -86,6 +86,9 @@ export function classify(block: Block): Classification {
   if (looksLikeData(lines)) {
     return verbatim('data', [...signals, 'structured-data']);
   }
+  if (looksLikeDiff(lines)) {
+    return verbatim('code', [...signals, 'diff-marked']);
+  }
   if (looksLikeShellCommands(lines)) {
     return verbatim('code', [...signals, 'shell-command-sequence']);
   }
@@ -134,7 +137,14 @@ function looksLikeTable(lines: string[]): boolean {
     const body = l.replace(/^\s+/, ''); // ignore leading indentation
     return (body.match(/ {2,}/g)?.length ?? 0) >= 2;
   }).length;
-  return columnar >= 2;
+  if (columnar >= 2) return true;
+
+  // Two-column output (`make help`-style name-description listings): a single
+  // wide alignment gap of 3+ spaces. Three, not two: typists put exactly two
+  // spaces after a sentence, so requiring a third keeps double-spaced prose
+  // reflowable while still catching printf-%-aligned columns.
+  const twoColumn = lines.filter((l) => / {3,}/.test(l.replace(/^\s+/, ''))).length;
+  return twoColumn >= 2;
 }
 
 // A log level only counts in log-line position: at the start of a line, or
@@ -167,9 +177,26 @@ function looksLikeData(lines: string[]): boolean {
   const first = lines[0]?.trim() ?? '';
   if (/^[{[]/.test(first)) return true; // JSON-ish
   if (/^<[a-zA-Z!?]/.test(first)) return true; // XML / HTML-ish
-  // "key: value" on most lines ⇒ YAML-ish.
-  const kv = lines.filter((l) => /^\s*[\w.-]+:\s+\S/.test(l)).length;
+  // "key: value" on most lines ⇒ YAML-ish. A block-sequence item ("- key: value"
+  // — the GitHub Actions / docker-compose shape) is the same signal behind a
+  // dash marker. Wrapped prose in a list pulls the ratio down (its continuation
+  // lines carry no colon), so genuine label: value structure still separates
+  // from a reflowable list.
+  const kv = lines.filter(
+    (l) => /^\s*[\w.-]+:\s+\S/.test(l) || /^\s*-\s+[\w.-]+:(?:\s|$)/.test(l),
+  ).length;
   return lines.length >= 2 && kv >= Math.ceil(lines.length * 0.6);
+}
+
+// A unified-diff block. Header lines (`diff --git`, `@@ … @@`, `---`/`+++`)
+// are definitive on their own. Bare change markers — a sign glued directly to
+// the text, unlike a list dash's trailing space — need two hits before they
+// outweigh the small chance of a prose line starting with a signed word.
+// Matters because a diff of *prose* has none of the code tells below, and
+// joining its lines buries the +/- markers mid-sentence.
+function looksLikeDiff(lines: string[]): boolean {
+  if (lines.some((l) => /^(?:diff --git\s|@@ |[-+]{3} )/.test(l))) return true;
+  return lines.filter((l) => /^[-+]\S/.test(l)).length >= 2;
 }
 
 function looksLikeCode(lines: string[], text: string): boolean {
@@ -178,6 +205,11 @@ function looksLikeCode(lines: string[], text: string): boolean {
   if (/=>|::|->|&&|\|\||===|!==/.test(text)) return true; // operators
   if (lines.some((l) => CODE_STATEMENT.test(l))) return true; // keyword used as code
   if (lines.some((l) => /^\s*[$#%>]\s+\S/.test(l))) return true; // shell / REPL prompt
+  // Two or more assignment-shaped lines (`total = price * quantity`): the
+  // symbol-density check misses them because a lone "=" is one character among
+  // long wordish identifiers, but nobody writes consecutive prose lines that
+  // each open with `identifier =`.
+  if (lines.filter((l) => /^\s*[\w.$\[\]]+\s*=\s*\S/.test(l)).length >= 2) return true;
   const symbols = text.match(CODE_SYMBOLS)?.length ?? 0;
   const nonSpace = text.replace(/\s/g, '').length || 1;
   return symbols / nonSpace > 0.08; // high symbol density

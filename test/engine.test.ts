@@ -66,8 +66,9 @@ describe('cleanup engine — properties', () => {
   });
 
   it('still drops the indent of a line it glues into the sentence', () => {
-    expect(clean('The quick brown fox jumped over\n    the lazy dog by the river')).toBe(
-      'The quick brown fox jumped over the lazy dog by the river',
+    // Wide enough to clear the narrow-block gate (nothing wraps under WRAP_MIN).
+    expect(clean('The quick brown fox jumped clear over\n    the lazy dog down by the river')).toBe(
+      'The quick brown fox jumped clear over the lazy dog down by the river',
     );
   });
 
@@ -84,9 +85,11 @@ describe('list markers are recognized consistently across the pipeline', () => {
   const markers = ['- ', '* ', '+ ', '• ', '1. ', '1) '];
   for (const marker of markers) {
     it(`keeps "${marker.trim()}" items apart and joins their wrapped lines`, () => {
-      const wrapped = `${marker}first item text that\ncontinues on a second line\n${marker}second item stays put`;
+      // Item lines are wider than WRAP_MIN so the narrow-block gate stays out
+      // of the way — this test is about marker consistency, not width.
+      const wrapped = `${marker}first item text that wraps and\ncontinues onto a second line here\n${marker}second item stays put`;
       expect(clean(wrapped)).toBe(
-        `${marker}first item text that continues on a second line\n${marker}second item stays put`,
+        `${marker}first item text that wraps and continues onto a second line here\n${marker}second item stays put`,
       );
     });
 

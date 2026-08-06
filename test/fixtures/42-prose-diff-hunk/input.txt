@@ -1,0 +1,4 @@
+ The quick brown fox jumps over the lazy dog while the sun sets slowly
+-behind the mountains and the valley fills with a warm golden light that
++behind the mountains as the valley fills with a cool violet light that
+ fades gently into the night before anyone thinks to look upward

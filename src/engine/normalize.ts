@@ -20,13 +20,15 @@ const ZERO_WIDTH = new RegExp('[\\u200B\\u2060\\uFEFF]', 'g');
 const EXOTIC_SPACES = new RegExp('[\\u00A0\\u1680\\u2000-\\u200A\\u202F\\u205F\\u3000]', 'g');
 // Terminal escape sequences (usually stripped on copy, but just in case).
 // Three shapes: CSI (colours/formatting, ESC [ … final), OSC (hyperlinks and
-// window titles, ESC ] … terminated by BEL or ESC \ — or by end of copy when
-// truncated), and the remaining short escapes (ESC = keypad mode, ESC 7 save
-// cursor, …: optional intermediates then one final byte).
+// window titles, ESC ] … terminated by BEL or ESC \ — or by end of *line* when
+// truncated: an OSC payload never legally contains a newline, and letting the
+// match cross one would mean a stray unterminated ESC ] silently deletes the
+// entire rest of the copy), and the remaining short escapes (ESC = keypad
+// mode, ESC 7 save cursor, …: optional intermediates then one final byte).
 const ANSI = new RegExp(
   '\\u001B(?:' +
     '\\[[0-9;?]*[ -\\/]*[@-~]' + // CSI
-    '|\\][^\\u0007\\u001B]*(?:\\u0007|\\u001B\\\\)?' + // OSC
+    '|\\][^\\u0007\\u001B\\n]*(?:\\u0007|\\u001B\\\\)?' + // OSC
     '|[ -\\/]*[0-~]' + // short escape sequences
     ')',
   'g',

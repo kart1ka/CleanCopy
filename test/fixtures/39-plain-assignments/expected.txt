@@ -1,0 +1,3 @@
+subtotal = unit_price * quantity
+discount = subtotal * coupon_rate
+total_due = subtotal - discount

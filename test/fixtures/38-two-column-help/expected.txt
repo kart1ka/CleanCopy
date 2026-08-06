@@ -1,0 +1,4 @@
+build       Compile the project into dist
+test        Run the whole test suite once
+lint        Check the source for style problems
+release     Tag and publish a new version

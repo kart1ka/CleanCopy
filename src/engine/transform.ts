@@ -148,6 +148,12 @@ function reflowParagraph(lines: string[], ctx: TransformContext = {}): string {
   if (trimmed.length === 1) return trimmed[0];
 
   const width = trimmed.reduce((m, l) => Math.max(m, l.length), 0);
+  // A block whose widest line is under WRAP_MIN cannot be width-wrapped prose —
+  // no real window is that narrow, so every break in it is the author's
+  // (`git branch` output, short assignments, one-command-per-line notes).
+  // Return it byte-for-byte: even the space collapsing below could flatten
+  // alignment inside lines that were never going to be joined.
+  if (width < WRAP_MIN) return lines.join('\n');
   // One longest line is not evidence of a wrap column: it may have been
   // created by an earlier cleanup pass. Require the edge to repeat before it
   // can independently justify removing another break.
@@ -184,6 +190,12 @@ function judgeBreak(
   if (HEADING.test(prev)) return { joined: false, score: 0, signals: ['veto:heading-above'] };
   if (HEADING.test(next)) return { joined: false, score: 0, signals: ['veto:heading-below'] };
   if (LIST_ITEM.test(next)) return { joined: false, score: 0, signals: ['veto:list-item'] };
+  // A marker line whose item is a single word ("* main", "- done") is
+  // structured output — branch lists, checkbox summaries — not a wrap: a line
+  // that wrapped after its first word would imply a window a few columns wide.
+  if (LIST_ITEM.test(prev) && !/\s/.test(prev.replace(LIST_ITEM, '').trim())) {
+    return { joined: false, score: 0, signals: ['veto:one-word-item'] };
+  }
 
   const atRightEdge =
     width !== undefined && prev.length >= WRAP_MIN && prev.length >= width - NEAR_MAX;
@@ -251,6 +263,9 @@ function reflowList(lines: string[], ctx: TransformContext = {}): string {
     ? lines
     : stripCommonMargin(lines.join('\n')).split('\n');
   const width = block.reduce((m, l) => Math.max(m, l.trim().length), 0);
+  // Same narrow-block gate as reflowParagraph: items this short were never
+  // wrapped, so there is nothing to rejoin and no space run worth collapsing.
+  if (width < WRAP_MIN) return block.join('\n');
   const hugging = block.filter((line) => line.trim().length >= width - NEAR_MAX).length;
   const establishedWidth = hugging >= 2 ? width : undefined;
   const out: string[] = [];
