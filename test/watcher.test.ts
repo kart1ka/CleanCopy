@@ -146,6 +146,13 @@ describe('helper protocol', () => {
     expect(parseHelperMessage('{"type":"write-failed"}')).toEqual({ type: 'write-failed' });
   });
 
+  it('parses the post-clear changeCount a write-failed ack carries', () => {
+    expect(parseHelperMessage('{"type":"write-failed","changeCount":8}')).toEqual({
+      type: 'write-failed',
+      changeCount: 8,
+    });
+  });
+
   it('parses hotkey presses and registration failures', () => {
     expect(parseHelperMessage('{"type":"hotkey","id":"revert"}')).toEqual({
       type: 'hotkey',
@@ -358,6 +365,72 @@ process.stdin.on('end', () => process.exit(0));
         { type: 'write', text: wrappedProse, expectedChangeCount: 8 },
       ]);
       expect(logLines.join('\n')).toContain('reverted: the clipboard holds the original copy again');
+    } finally {
+      watcher.stop();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('offers the original for revert when a clean write fails after the clear', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cleancopy-write-failed-'));
+    const outPath = join(dir, 'received.jsonl');
+
+    // A terminal copy is auto-cleaned, but the write fails AFTER the helper
+    // cleared the pasteboard (write-failed carries the post-clear count 8) —
+    // the clipboard is now empty and the user's text lives only in Node's
+    // memory. The revert hotkey must restore the ORIGINAL, pinned to 8.
+    const fakeHelper = join(dir, 'fake-helper.js');
+    writeFileSync(
+      fakeHelper,
+      `#!/usr/bin/env node
+const fs = require('fs');
+const readline = require('readline');
+const text = ${JSON.stringify(wrappedProse)};
+console.log(JSON.stringify({ type: 'ready' }));
+console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.googlecode.iterm2', appName: 'iTerm2', text, changeCount: 7 }));
+let writes = 0;
+readline.createInterface({ input: process.stdin }).on('line', (line) => {
+  fs.appendFileSync(${JSON.stringify(outPath)}, line + '\\n');
+  if (JSON.parse(line).type !== 'write') return;
+  writes += 1;
+  if (writes === 1) {
+    console.log(JSON.stringify({ type: 'write-failed', changeCount: 8 }));
+    console.log(JSON.stringify({ type: 'hotkey', id: 'revert' }));
+  } else {
+    console.log(JSON.stringify({ type: 'wrote', changeCount: 9 }));
+  }
+});
+process.stdin.on('end', () => process.exit(0));
+`,
+    );
+    chmodSync(fakeHelper, 0o755);
+
+    const logLines: string[] = [];
+    const watcher = startWatcher({
+      helperPath: fakeHelper,
+      log: (l) => logLines.push(l),
+      hotkeys: { revert: 'cmd+ctrl+z' },
+    });
+    try {
+      // Wait for the second write to reach the received file itself (the
+      // fake helper appends from another process, so logs can lead the file)
+      // AND for the parent to have processed the final wrote ack.
+      const deadline = Date.now() + 3000;
+      while (
+        (!existsSync(outPath) ||
+          readFileSync(outPath, 'utf8').split('"type":"write"').length < 3 ||
+          !logLines.some((l) => l.startsWith('reverted'))) &&
+        Date.now() < deadline
+      ) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      const received = readFileSync(outPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+      expect(received).toEqual([
+        { type: 'write', text: clean(wrappedProse), expectedChangeCount: 7 },
+        { type: 'write', text: wrappedProse, expectedChangeCount: 8 },
+      ]);
+      expect(logLines.join('\n')).toContain('the revert hotkey restores the original copy');
+      expect(logLines.join('\n')).toContain('reverted');
     } finally {
       watcher.stop();
       rmSync(dir, { recursive: true, force: true });

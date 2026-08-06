@@ -175,10 +175,23 @@ export function startWatcher(options: WatcherOptions): Watcher {
     }
     if (message.type === 'write-failed') {
       const answered = pendingWrites.shift();
-      // A failed revert leaves our cleaned text on the clipboard, so the
-      // original is still worth holding on to for another press.
-      if (answered?.kind === 'revert' && revertible === null) revertible = answered.state;
-      log('skipped a write: the native helper could not write to the clipboard');
+      // The helper clears the pasteboard before writing, so a failed write
+      // leaves it EMPTY — whichever kind failed, the user's original text now
+      // exists only here. Offer it on the revert hotkey, pinned to the
+      // post-clear changeCount the helper reports, so the restore can never
+      // land on top of a copy made after the failure.
+      const original =
+        answered?.kind === 'clean' ? answered.original : answered?.state.original;
+      if (original !== undefined && typeof message.changeCount === 'number') {
+        revertible = { original, changeCount: message.changeCount };
+        log(
+          'a write failed and the clipboard may now be empty — the revert hotkey restores the original copy',
+        );
+      } else {
+        // No count to pin a restore to (helper predates the ack field).
+        if (answered?.kind === 'revert' && revertible === null) revertible = answered.state;
+        log('skipped a write: the native helper could not write to the clipboard');
+      }
       return;
     }
     if (message.type === 'dropped') {

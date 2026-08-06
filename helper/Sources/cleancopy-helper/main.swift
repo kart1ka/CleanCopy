@@ -222,6 +222,12 @@ func pollPasteboard() {
         return
     }
     guard let text = pasteboard.string(forType: .string) else { return } // not plain text
+    // The types check above and the string read are two separate pasteboard
+    // snapshots. If anything landed in between — a concealed password-manager
+    // copy being the case that matters — the text just read belongs to the
+    // NEWER item and was never screened. Drop it; the next poll re-judges the
+    // new state from scratch (its count differs from lastSeenChangeCount).
+    guard pasteboard.changeCount == count else { return }
     guard text.utf16.count <= maxTextUTF16 else {
         // Withheld, not vanished: Node logs the drop so an oversized copy is
         // debuggable from the watcher side. The message carries no content.
@@ -261,7 +267,13 @@ func handle(line: Data) {
             send(["type": "stale"])
             return
         }
-        pasteboard.clearContents()
+        // clearContents() returns the changeCount this write will carry
+        // (setString on the fresh ownership does not bump it again). Using the
+        // returned value — never re-reading changeCount after the write —
+        // closes the race where an external copy lands mid-write and its
+        // count gets adopted as our own: suppressed by the poll and pinned
+        // by a later revert, i.e. someone else's copy silently clobbered.
+        let clearedCount = pasteboard.clearContents()
         let wrote: Bool
         if failNextWrite {
             failNextWrite = false
@@ -270,16 +282,21 @@ func handle(line: Data) {
             wrote = pasteboard.setString(text, forType: .string)
         }
         guard wrote else {
-            // Do not claim this changeCount as ours. If another process took
-            // ownership during the write, the next poll must still report it.
-            send(["type": "write-failed"])
+            // The clear above already emptied the pasteboard, so the text it
+            // held now exists only in Node's memory. Report the cleared count
+            // so Node can offer a restore pinned to it — if another process
+            // took ownership mid-write, its count differs and the stale check
+            // refuses the restore rather than clobbering. The count is NOT
+            // claimed as our own: the next poll must still report whatever
+            // the pasteboard holds now.
+            send(["type": "write-failed", "changeCount": clearedCount])
             return
         }
-        ownWriteChangeCount = pasteboard.changeCount
-        lastSeenChangeCount = pasteboard.changeCount
+        ownWriteChangeCount = clearedCount
+        lastSeenChangeCount = clearedCount
         // The count this write produced: Node pins any later revert to it so
         // a revert can never overwrite a copy that landed in between.
-        send(["type": "wrote", "changeCount": pasteboard.changeCount])
+        send(["type": "wrote", "changeCount": clearedCount])
     case "ping":
         send(["type": "pong"])
     default:

@@ -23,7 +23,10 @@ export type HelperMessage =
   // Ack of a write. changeCount is the pasteboard count the write produced —
   // the revert flow echoes it back so a revert can never clobber a newer copy.
   | { type: 'wrote'; changeCount?: number }
-  | { type: 'write-failed' }
+  // A write that failed after the helper had already cleared the pasteboard.
+  // changeCount is the post-clear count: a restore of the lost text can be
+  // pinned to it, so restoring can never clobber a copy that landed after.
+  | { type: 'write-failed'; changeCount?: number }
   | { type: 'stale' } // a write was skipped because the pasteboard had moved on
   | { type: 'dropped'; reason: string } // a copy withheld at the transport (content-free)
   | { type: 'hotkey'; id: string } // a registered global hotkey was pressed
@@ -46,13 +49,13 @@ export function parseHelperMessage(line: string): HelperMessage | null {
   const msg = value as Record<string, unknown>;
   switch (msg.type) {
     case 'ready':
-    case 'write-failed':
     case 'stale':
     case 'pong':
       return { type: msg.type };
     case 'wrote':
+    case 'write-failed':
       return {
-        type: 'wrote',
+        type: msg.type,
         ...(typeof msg.changeCount === 'number' ? { changeCount: msg.changeCount } : {}),
       };
     case 'dropped':
