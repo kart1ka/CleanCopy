@@ -38,6 +38,7 @@ import Foundation
 var pasteboardName: NSPasteboard.Name? = nil
 var pollInterval: TimeInterval = 0.2
 var failNextWrite = false // deterministic integration-test hook
+var markWritesSpec: String? = nil // integration-test hook; resolved below
 var hotkeySpecs: [(id: String, spec: String)] = []
 
 // Transport guard only — the user-visible size policy (and its "too-large"
@@ -59,6 +60,11 @@ while argIndex < arguments.count {
         if argIndex < arguments.count { pollInterval = max(0.05, Double(arguments[argIndex]) ?? pollInterval) }
     case "--fail-next-write":
         failNextWrite = true
+    case "--mark-writes": // "concealed" | "transient" — integration-test hook:
+        // lets the tests exercise the skip-secret-items path on a private
+        // pasteboard by making this instance's writes carry the marker type.
+        argIndex += 1
+        if argIndex < arguments.count { markWritesSpec = arguments[argIndex] }
     case "--max-text": // lower the transport cap; used by the integration tests
         argIndex += 1
         if argIndex < arguments.count { maxTextUTF16 = Int(arguments[argIndex]) ?? maxTextUTF16 }
@@ -88,6 +94,17 @@ let pasteboard = pasteboardName.map { NSPasteboard(name: $0) } ?? NSPasteboard.g
 // ephemeral (http://nspasteboard.org) must never be read or rewritten.
 let concealedType = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
 let transientType = NSPasteboard.PasteboardType("org.nspasteboard.TransientType")
+
+var markWritesType: NSPasteboard.PasteboardType? = nil
+if let spec = markWritesSpec {
+    switch spec {
+    case "concealed": markWritesType = concealedType
+    case "transient": markWritesType = transientType
+    default:
+        FileHandle.standardError.write(Data("cleancopy-helper: --mark-writes expects concealed or transient, got \(spec)\n".utf8))
+        exit(2)
+    }
+}
 
 // --- outgoing messages -----------------------------------------------------
 
@@ -280,6 +297,11 @@ func handle(line: Data) {
             wrote = false
         } else {
             wrote = pasteboard.setString(text, forType: .string)
+            // Test hook: stamp the item the way password managers do, so the
+            // integration tests can prove marked items are never read.
+            if wrote, let mark = markWritesType {
+                _ = pasteboard.setString("", forType: mark)
+            }
         }
         guard wrote else {
             // The clear above already emptied the pasteboard, so the text it

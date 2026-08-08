@@ -171,6 +171,35 @@ describe.skipIf(!helperPath)('cleancopy-helper (integration, private pasteboard)
     await observer.waitFor((m) => m.type === 'clipboard' && m.text === 'small enough copy');
   });
 
+  for (const kind of ['concealed', 'transient'] as const) {
+    it(`never reads a pasteboard item marked ${kind}`, async () => {
+      const pasteboard = `cleancopy-test-${process.pid}-${kind}-${Date.now()}`;
+      const observer = launch(pasteboard);
+      // The marked writer stamps its items the way password managers do
+      // (org.nspasteboard.* types) — a --mark-writes test hook in the helper.
+      const secretWriter = launch(pasteboard, ['--mark-writes', kind]);
+      const plainWriter = launch(pasteboard);
+      await observer.waitFor((m) => m.type === 'ready');
+      await secretWriter.waitFor((m) => m.type === 'ready');
+      await plainWriter.waitFor((m) => m.type === 'ready');
+
+      secretWriter.send({ type: 'write', text: 'hunter2, a secret that must never surface' });
+      await secretWriter.waitFor((m) => m.type === 'wrote');
+
+      // The marked item must vanish without a trace: no clipboard event and
+      // no dropped message either — even "a secret existed" is metadata.
+      await sleep(300); // several poll intervals
+      expect(observer.messages.filter((m) => m.type === 'clipboard')).toEqual([]);
+      expect(observer.messages.filter((m) => m.type === 'dropped')).toEqual([]);
+
+      // Polling survived the skip: the next ordinary copy flows through, and
+      // it is the ONLY clipboard event the observer ever produced.
+      plainWriter.send({ type: 'write', text: 'ordinary copy' });
+      await observer.waitFor((m) => m.type === 'clipboard' && m.text === 'ordinary copy');
+      expect(observer.messages.filter((m) => m.type === 'clipboard')).toHaveLength(1);
+    });
+  }
+
   it('refuses an invalid hotkey combo at startup (exit 2)', async () => {
     // Node validates combos before passing them, so an invalid one reaching
     // the helper is a caller bug: fail loudly, not half-configured.
