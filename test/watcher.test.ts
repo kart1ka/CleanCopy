@@ -429,7 +429,7 @@ process.stdin.on('end', () => process.exit(0));
         { type: 'write', text: clean(wrappedProse), expectedChangeCount: 7 },
         { type: 'write', text: wrappedProse, expectedChangeCount: 8 },
       ]);
-      expect(logLines.join('\n')).toContain('the revert hotkey restores the original copy');
+      expect(logLines.join('\n')).toContain('press cmd+ctrl+z to restore the original');
       expect(logLines.join('\n')).toContain('reverted');
     } finally {
       watcher.stop();

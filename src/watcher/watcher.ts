@@ -184,8 +184,13 @@ export function startWatcher(options: WatcherOptions): Watcher {
         answered?.kind === 'clean' ? answered.original : answered?.state.original;
       if (original !== undefined && typeof message.changeCount === 'number') {
         revertible = { original, changeCount: message.changeCount };
+        // Promise only what is reachable: without a revert hotkey there is no
+        // way to trigger the restore, and even with one the restore is
+        // refused (not forced) if the clipboard has moved on since.
         log(
-          'a write failed and the clipboard may now be empty — the revert hotkey restores the original copy',
+          revertHotkey
+            ? `a write failed and the clipboard may now be empty — press ${revertHotkey} to restore the original (refused if the clipboard has changed since)`
+            : 'a write failed and the clipboard may now be empty; no revert hotkey is configured to restore the original',
         );
       } else {
         // No count to pin a restore to (helper predates the ack field).
