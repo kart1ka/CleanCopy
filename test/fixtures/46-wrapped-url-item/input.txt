@@ -1,0 +1,2 @@
+- https://example.com/docs/guides/clipboard-integration
+  which explains the pasteboard change-count polling approach

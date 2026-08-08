@@ -89,6 +89,9 @@ export function classify(block: Block): Classification {
   if (looksLikeDiff(lines)) {
     return verbatim('code', [...signals, 'diff-marked']);
   }
+  if (looksLikeTokenList(lines)) {
+    return verbatim('other', [...signals, 'single-token-lines']);
+  }
   if (looksLikeShellCommands(lines)) {
     return verbatim('code', [...signals, 'shell-command-sequence']);
   }
@@ -197,6 +200,24 @@ function looksLikeData(lines: string[]): boolean {
 function looksLikeDiff(lines: string[]): boolean {
   if (lines.some((l) => /^(?:diff --git\s|@@ |[-+]{3} )/.test(l))) return true;
   return lines.filter((l) => /^[-+]\S/.test(l)).length >= 2;
+}
+
+// One token per line — file listings (`ls -1`, `git status` paths), branch
+// lists (`git branch`, where the current branch carries a `* ` marker),
+// package lists. Prose never puts a single word on every line, so nothing
+// here can be a wrap and every break is structure. Markers are stripped
+// before counting so `* main` reads as the one token it is — this guard must
+// therefore run before the list branch, and it is what protects every
+// permutation of branch-list output regardless of where the starred or the
+// long name sits.
+function looksLikeTokenList(lines: string[]): boolean {
+  return (
+    lines.length >= 2 &&
+    lines.every((l) => {
+      const content = l.replace(LIST_ITEM, '').trim();
+      return content.length > 0 && !/\s/.test(content);
+    })
+  );
 }
 
 function looksLikeCode(lines: string[], text: string): boolean {

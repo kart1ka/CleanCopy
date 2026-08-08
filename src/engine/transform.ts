@@ -193,12 +193,6 @@ function judgeBreak(
   if (HEADING.test(prev)) return { joined: false, score: 0, signals: ['veto:heading-above'] };
   if (HEADING.test(next)) return { joined: false, score: 0, signals: ['veto:heading-below'] };
   if (LIST_ITEM.test(next)) return { joined: false, score: 0, signals: ['veto:list-item'] };
-  // A marker line whose item is a single word ("* main", "- done") is
-  // structured output — branch lists, checkbox summaries — not a wrap: a line
-  // that wrapped after its first word would imply a window a few columns wide.
-  if (LIST_ITEM.test(prev) && !/\s/.test(prev.replace(LIST_ITEM, '').trim())) {
-    return { joined: false, score: 0, signals: ['veto:one-word-item'] };
-  }
 
   const atRightEdge =
     width !== undefined && prev.length >= WRAP_MIN && prev.length >= width - NEAR_MAX;
