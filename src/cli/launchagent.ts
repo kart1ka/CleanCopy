@@ -43,6 +43,13 @@ export function currentConfig(): LaunchAgentConfig {
     const value = process.env[key];
     if (value) env[key] = value;
   }
+  // Bake the RESOLVED state dir, never a relative one: launchd runs the agent
+  // with cwd `/`, where a relative path resolves somewhere unwritable and the
+  // agent dies at startup — exit 0 under launchd, so KeepAlive never
+  // relaunches it and autostart silently does nothing.
+  if (env.CLEANCOPY_STATE_DIR) {
+    env.CLEANCOPY_STATE_DIR = path.resolve(env.CLEANCOPY_STATE_DIR);
+  }
   // Lets the daemon know launchd is supervising it: permanent startup
   // failures must then exit 0, or KeepAlive would relaunch them forever.
   env.CLEANCOPY_LAUNCHD = '1';

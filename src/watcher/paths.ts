@@ -7,10 +7,11 @@ import * as path from 'path';
 
 export function stateDir(): string {
   const override = process.env.CLEANCOPY_STATE_DIR;
-  // Resolve a relative override once, here: left verbatim, each command would
-  // resolve it against its own cwd — `start` in one directory, `stop` in
-  // another, and the pid file silently lands in two different places (worse
-  // under launchd, whose cwd is `/`).
+  // resolve() makes each process's view deterministic, but it cannot make a
+  // RELATIVE override coherent across commands — `start` in one directory and
+  // `stop` in another still resolve to different places. That is inherent to
+  // a relative env var, so the CLI warns about relative overrides at startup,
+  // and `install` bakes the resolved absolute path into the launchd plist.
   return override ? path.resolve(override) : path.join(os.homedir(), '.cleancopy');
 }
 

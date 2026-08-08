@@ -82,6 +82,17 @@ export async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0];
 
+  // A relative state-dir override resolves against each command's cwd, so
+  // `start` here and `stop` there would track different pid files. Warn once,
+  // up front — resolving cannot fix this, only an absolute path can.
+  const stateOverride = process.env.CLEANCOPY_STATE_DIR;
+  if (stateOverride && !path.isAbsolute(stateOverride)) {
+    process.stderr.write(
+      `warning: CLEANCOPY_STATE_DIR is relative ("${stateOverride}") — commands run ` +
+        'from different directories will use different state. Use an absolute path.\n',
+    );
+  }
+
   if (!command || command === '--help' || command === '-h' || command === 'help') {
     process.stdout.write(HELP);
     return;
