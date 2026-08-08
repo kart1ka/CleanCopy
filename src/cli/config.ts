@@ -57,6 +57,19 @@ function fail(message: string): never {
   process.exit(1);
 }
 
+/**
+ * The manual-mode-without-a-clean-hotkey dead end (auto cleaning off by mode,
+ * manual cleaning off by hotkey — nothing will trigger a clean). Two roads
+ * lead in: switching to manual mode with no hotkey set, and turning the
+ * hotkey off while in manual mode. One warning, one wording, both roads.
+ */
+function warnNoCleanHotkey(): void {
+  process.stderr.write(
+    'note: manual mode has no clean hotkey set — nothing will trigger a clean.\n' +
+      'set one with: cleancopy config hotkey clean cmd+ctrl+c\n',
+  );
+}
+
 export function configCommand(args: string[]): void {
   const { config, warnings } = loadConfig();
   for (const warning of warnings) process.stderr.write(`warning: ${warning}\n`);
@@ -72,12 +85,7 @@ export function configCommand(args: string[]): void {
       fail(`mode must be "auto" or "manual", got "${mode ?? ''}"`);
     }
     config.mode = mode;
-    if (mode === 'manual' && config.hotkeys.clean === null) {
-      process.stderr.write(
-        'note: manual mode has no clean hotkey set — nothing will trigger a clean.\n' +
-          'set one with: cleancopy config hotkey clean cmd+ctrl+c\n',
-      );
-    }
+    if (mode === 'manual' && config.hotkeys.clean === null) warnNoCleanHotkey();
     saveAndReport(config);
     return;
   }
@@ -91,16 +99,7 @@ export function configCommand(args: string[]): void {
     if (!combo) fail('missing hotkey combo (or "off")');
     if (combo === 'off') {
       config.hotkeys[which] = null;
-      // The mode-manual transition prints this same warning; repeat it here
-      // because disabling the clean hotkey WHILE IN manual mode is the other
-      // road into the same dead end (auto cleaning off by mode, manual
-      // cleaning off by hotkey — nothing will trigger a clean).
-      if (which === 'clean' && config.mode === 'manual') {
-        process.stdout.write(
-          'note: manual mode has no clean hotkey set — nothing will trigger a clean.\n' +
-            '      Set one with: cleancopy config hotkey clean <combo>\n',
-        );
-      }
+      if (which === 'clean' && config.mode === 'manual') warnNoCleanHotkey();
     } else {
       try {
         config.hotkeys[which] = normalizeHotkey(combo);
