@@ -100,11 +100,15 @@ export function doctor(version: string): number {
     detail: `${process.version}${nodeMajor >= 22 ? '' : ' (22 or later required)'}`,
   });
 
+  // helperPath is only set once the executability check has passed — set any
+  // earlier and a resolved-but-not-executable helper would print an "ok"
+  // architectures line directly under its own "!!" failure.
   let helperPath: string | null = null;
   try {
-    helperPath = resolveHelperBinary();
-    fs.accessSync(helperPath, fs.constants.X_OK);
-    checks.push({ level: 'pass', label: 'helper', detail: `${helperPath} (executable)` });
+    const resolved = resolveHelperBinary();
+    fs.accessSync(resolved, fs.constants.X_OK);
+    helperPath = resolved;
+    checks.push({ level: 'pass', label: 'helper', detail: `${resolved} (executable)` });
   } catch (err) {
     checks.push({
       level: 'fail',
