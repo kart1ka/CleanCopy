@@ -1,4 +1,4 @@
-import { normalize } from './normalize';
+import { normalize, stripRenderMargin } from './normalize';
 import { segment } from './segment';
 import { classify } from './classify';
 import { transform, inferWrapWidth, shouldReflow } from './transform';
@@ -69,13 +69,21 @@ export function cleanWithReport(input: string, options: CleanOptions = {}): Clea
     return { block, classification, output, joins };
   });
 
-  const stitched = reports
-    .map((r, i) =>
-      i === 0 ? r.output : '\n'.repeat(r.block.blankLinesBefore + 1) + r.output,
-    )
-    .join('')
-    .replace(/[ \t]+$/gm, '') // belt-and-braces trailing trim
-    .replace(/^\n+|\n+$/g, ''); // no leading / trailing blank lines
+  // The final stripRenderMargin makes the output a fixed point of normalize:
+  // a join can absorb the only flush-left line (an indented first line
+  // swallowing its block), leaving a margin a second clean() would strip.
+  // Stripping it here — at the whole-output level, with normalize's own
+  // guard — keeps clean() idempotent without flattening the block-local
+  // indent of, say, a quoted paragraph in a larger paste.
+  const stitched = stripRenderMargin(
+    reports
+      .map((r, i) =>
+        i === 0 ? r.output : '\n'.repeat(r.block.blankLinesBefore + 1) + r.output,
+      )
+      .join('')
+      .replace(/[ \t]+$/gm, '') // belt-and-braces trailing trim
+      .replace(/^\n+|\n+$/g, ''), // no leading / trailing blank lines
+  );
   const text = stitched.length > 0 && endsWithNewline ? stitched + '\n' : stitched;
 
   return { text, reports, inferredWidth };

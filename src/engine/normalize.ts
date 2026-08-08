@@ -54,12 +54,22 @@ export function normalize(input: string): string {
     .join('\n');
 
   // 5. Slide everything back to the left edge: remove the indentation that
-  //    EVERY non-blank line shares (the terminal / Claude render margin). An
-  //    indented list copied on its own is ambiguous: its margin may instead be
-  //    the list's nesting level. Preserve it rather than flattening structure.
-  if (!isIndentedListFragment(text)) text = stripCommonMargin(text);
+  //    EVERY non-blank line shares (the terminal / Claude render margin).
+  text = stripRenderMargin(text);
 
   return text;
+}
+
+/**
+ * The margin-strip normalize applies, reusable on clean()'s stitched output:
+ * remove the indentation every non-blank line shares — unless the text is an
+ * indented list fragment, whose margin may be the list's nesting level and is
+ * preserved rather than flattened. Running the SAME guarded strip on the
+ * output makes it a fixed point of normalize, which is what keeps
+ * clean(clean(x)) === clean(x) when a join absorbs the only flush-left line.
+ */
+export function stripRenderMargin(text: string): string {
+  return isIndentedListFragment(text) ? text : stripCommonMargin(text);
 }
 
 function isIndentedListFragment(text: string): boolean {
