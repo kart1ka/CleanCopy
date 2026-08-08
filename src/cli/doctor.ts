@@ -7,7 +7,7 @@ import {
   stateDir,
 } from '../watcher';
 import { isLaunchAgentLoaded, plistPath } from './launchagent';
-import { isAlive, processStartedAt, readPidRecord } from './daemon';
+import { isOurs, readPidRecord } from './daemon';
 
 interface CheckResult {
   level: 'pass' | 'info' | 'warning' | 'fail';
@@ -169,11 +169,7 @@ export function doctor(version: string): number {
   // Unlike `status`, doctor deliberately does not remove a stale pid file:
   // diagnostics should be safe to run while investigating a broken install.
   const record = readPidRecord();
-  const pid = record &&
-    isAlive(record.pid) &&
-    (record.startedAt === '' || processStartedAt(record.pid) === record.startedAt)
-    ? record.pid
-    : null;
+  const pid = record && isOurs(record) ? record.pid : null;
   checks.push({
     level: 'info',
     label: 'watcher',

@@ -127,8 +127,12 @@ export function isAlive(pid: number): boolean {
   }
 }
 
-/** Whether the record still points at the process that wrote it. */
-function isOurs(record: PidRecord): boolean {
+/**
+ * Whether the record still points at the process that wrote it — THE
+ * pid-recycling rule. Read-only; exported so doctor shares this exact check
+ * instead of drifting on a copy.
+ */
+export function isOurs(record: PidRecord): boolean {
   if (!isAlive(record.pid)) return false;
   // '' means ps failed when the file was written; fall back to liveness alone.
   return record.startedAt === '' || processStartedAt(record.pid) === record.startedAt;
