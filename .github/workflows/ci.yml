@@ -9,11 +9,20 @@ permissions:
 
 jobs:
   verify:
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [macos-latest]
         node: [22, 24]
+        include:
+          # One Intel run: Apple Silicon runners only ever execute the arm64
+          # slice of the universal helper, so without this the x86_64 half
+          # ships untested. macos-15-intel is GitHub's last Intel image — if
+          # the label is ever retired, replace it rather than dropping the
+          # Intel coverage.
+          - os: macos-15-intel
+            node: 22
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
