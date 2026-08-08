@@ -41,6 +41,6 @@ jobs:
           CLI="$RUNNER_TEMP/cleancopy-smoke/node_modules/cleancopy/dist/cli/index.js"
           node "$CLI" --help
           test "$(node "$CLI" --version)" = "$(node -p "require('./package.json').version")"
-          node "$CLI" doctor
+          CLEANCOPY_STATE_DIR="$RUNNER_TEMP/cleancopy-state" node "$CLI" doctor
           node "$CLI" clean < test/fixtures/01-wrapped-paragraph/input.txt > "$RUNNER_TEMP/cleaned.txt"
           diff -u test/fixtures/01-wrapped-paragraph/expected.txt "$RUNNER_TEMP/cleaned.txt"
