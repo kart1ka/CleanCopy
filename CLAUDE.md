@@ -8,7 +8,7 @@ CleanCopy cleans up text copied from a terminal so it pastes neatly into other a
 
 ## Status
 
-The core product works end to end: (1) the cleanup engine, (2) the fixture test corpus, (3) the `cleancopy clean` CLI, and (4) the live clipboard watcher — the Swift helper (`helper/`), the Node orchestration (`src/watcher/`), and the `start`/`stop`/`status`/`run` commands — plus launchd autostart (`install` to enable, `stop --disable-autostart` to stop and disable) — are all on disk and tested. Not yet built: npm publish with a prebuilt universal helper binary, and everything under "Planned later" below.
+The core product works end to end: (1) the cleanup engine, (2) the fixture test corpus, (3) the `cleancopy clean` CLI, and (4) the live clipboard watcher — the Swift helper (`helper/`), the Node orchestration (`src/watcher/`), and the `start`/`stop`/`status`/`run` commands — plus launchd autostart (`install` to enable, `stop --disable-autostart` to stop and disable) — are all on disk and tested. The npm publish path is also built: `.github/workflows/publish.yml` publishes with provenance when a GitHub release is created, `prepublishOnly` builds the universal helper, and RELEASING.md documents the flow. Not yet done: the first actual publish (repo public, npm environment/token, the v1.0.0 tag) and everything under "Planned later" below.
 
 ## Commands
 
