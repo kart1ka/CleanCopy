@@ -55,6 +55,14 @@ Pure functions: text in, text out, **no side effects and no macOS/clipboard code
 - **Always safe** (the normalize step): whitespace cleanup, unicode/zero-width cleanup, collapsing big blank-line gaps, shared-margin removal. Apply to everything, every time.
 - **Risky** (gated behind classification + confidence): gluing wrapped lines back into paragraphs. This is the headline feature and the one that corrupts code/tables/logs if misapplied — so it only runs when a block is clearly prose or a list.
 
+### Known residual tradeoffs (accepted, not bugs)
+
+Each of these fails in the invisible direction (prose left untidied or frozen), never the fatal one (verbatim content reflowed). Revisit only with real-world evidence:
+
+- **Wide SQL still reflows.** Lowercase SQL wider than the narrow-block gate (`select … from users` at realistic widths) is joined; protecting it needs keyword heuristics too likely to freeze ordinary prose ("where we went last summer"). Fixture 41-narrow-sql covers only the narrow shape, on purpose.
+- **One-marker diff hunks aren't caught.** The diff guard needs two bare `+`/`-` markers or a header line (`@@`, `---`/`+++`, `diff --git`); a single changed line with context and no header slips through. The threshold spares prose with signed tokens — which is also why blocks with two `+1`/`-1`-style line starts freeze as diffs.
+- **`- key: value` markdown lists freeze as data.** Postmortem-style label lists classify YAML-ish and stay verbatim; wrapped items still reflow (continuation lines dilute the key-value ratio below the 0.6 bar).
+
 ## Testing — where quality actually comes from
 
 The engine is only as good as its examples. Tests are fixture-driven: `test/fixtures/<case>/input.txt` paired with `expected.txt`; the suite runs `clean(input)` and compares.
