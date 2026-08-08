@@ -81,6 +81,29 @@ function machineArchitecture(): string {
 }
 
 /**
+ * The Node floor, read from package.json's engines field so it cannot drift
+ * from what npm enforces at install time. Falls back to the known floor when
+ * the installation is too damaged to read its own manifest.
+ */
+function requiredNodeMajor(): number {
+  try {
+    const packagePath = path.resolve(__dirname, '..', '..', 'package.json');
+    const parsed: unknown = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+    if (typeof parsed === 'object' && parsed !== null) {
+      const engines = (parsed as Record<string, unknown>).engines;
+      if (typeof engines === 'object' && engines !== null) {
+        const node = (engines as Record<string, unknown>).node;
+        const major = typeof node === 'string' ? node.match(/\d+/)?.[0] : undefined;
+        if (major) return Number.parseInt(major, 10);
+      }
+    }
+  } catch {
+    // Fall through to the baked-in floor.
+  }
+  return 22;
+}
+
+/**
  * Print content-safe installation diagnostics. This never reads clipboard
  * contents, creates state, or changes launchd configuration.
  */
@@ -94,10 +117,11 @@ export function doctor(version: string): number {
   });
 
   const nodeMajor = Number.parseInt(process.versions.node.split('.')[0] ?? '', 10);
+  const requiredMajor = requiredNodeMajor();
   checks.push({
-    level: nodeMajor >= 22 ? 'pass' : 'fail',
+    level: nodeMajor >= requiredMajor ? 'pass' : 'fail',
     label: 'Node.js',
-    detail: `${process.version}${nodeMajor >= 22 ? '' : ' (22 or later required)'}`,
+    detail: `${process.version}${nodeMajor >= requiredMajor ? '' : ` (${requiredMajor} or later required)`}`,
   });
 
   // helperPath is only set once the executability check has passed — set any
