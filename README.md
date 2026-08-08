@@ -121,6 +121,15 @@ event log at `~/.cleancopy/cleancopy.log` records content-free summaries such
 as `cleaned copy from iTerm2 (12 lines -> 4)`. Pasteboard items marked
 concealed or transient, such as password-manager items, are never read.
 
+The bundled native helper is a small open-source Swift binary (`helper/` in
+this repository), compiled in CI and shipped inside the npm package. It is
+**not code-signed or notarized**: files installed through npm do not carry the
+macOS quarantine attribute, so Gatekeeper does not block it, but you are
+trusting the npm package rather than an Apple-verified signature. The npm
+release is published with provenance, so you can verify the package was built
+from this repository — or build the helper yourself with
+`npm run build:helper`.
+
 ## How it works
 
 The cleanup engine is a pure text transformation with four stages:
