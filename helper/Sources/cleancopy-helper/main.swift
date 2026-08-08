@@ -296,12 +296,15 @@ func handle(line: Data) {
             failNextWrite = false
             wrote = false
         } else {
-            wrote = pasteboard.setString(text, forType: .string)
-            // Test hook: stamp the item the way password managers do, so the
-            // integration tests can prove marked items are never read.
-            if wrote, let mark = markWritesType {
+            // Test hook: stamp the marker BEFORE the text (both inside the
+            // clearContents ownership above) so no observer can ever see the
+            // secret unmarked — mid-gap the item is marker-only, not plain
+            // text, and is skipped. Real password managers declare their
+            // types atomically; marker-first is the closest two calls get.
+            if let mark = markWritesType {
                 _ = pasteboard.setString("", forType: mark)
             }
+            wrote = pasteboard.setString(text, forType: .string)
         }
         guard wrote else {
             // The clear above already emptied the pasteboard, so the text it
