@@ -88,6 +88,16 @@ while argIndex < arguments.count {
     argIndex += 1
 }
 
+// Carbon delivers hotkey presses through the AppKit/Carbon event dispatcher,
+// which a bare RunLoop.main.run() never pumps: RegisterEventHotKey returns
+// noErr and the InstallEventHandler callback is simply never called. Running
+// NSApplication's event loop (at the bottom of this file) is what makes
+// registered hotkeys actually arrive. The application object is created here,
+// before any other AppKit use, and .accessory keeps the process headless — no
+// Dock icon, no menu bar, no window.
+let app = NSApplication.shared
+app.setActivationPolicy(.accessory)
+
 let pasteboard = pasteboardName.map { NSPasteboard(name: $0) } ?? NSPasteboard.general
 
 // Items marked by password managers and clipboard tools as secret or
@@ -356,4 +366,8 @@ RunLoop.main.add(timer, forMode: .common)
 
 registerHotkeys()
 send(["type": "ready"])
-RunLoop.main.run()
+
+// NSApplication.run() drives the main run loop, so the pasteboard Timer above
+// and the exit(0) dispatched on stdin EOF both keep working. See the comment
+// where `app` is created for why this cannot be RunLoop.main.run().
+app.run()
