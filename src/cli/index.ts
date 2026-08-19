@@ -197,7 +197,7 @@ export async function main(): Promise<void> {
     return;
   }
   if (command === 'config') {
-    configCommand(args.slice(1));
+    await configCommand(args.slice(1));
     return;
   }
 

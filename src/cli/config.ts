@@ -5,7 +5,7 @@ import {
   saveConfig,
   type Config,
 } from '../watcher';
-import { runningPid } from './daemon';
+import { runningPid, start, stop } from './daemon';
 
 // `cleancopy config` — read and change the watcher's settings. The settings
 // live in a plain JSON file (configFilePath()), so this command is a
@@ -41,13 +41,22 @@ function show(config: Config): void {
   process.stdout.write(`file:   ${configFilePath()}\n`);
 }
 
-function saveAndReport(config: Config): void {
+async function saveAndReport(config: Config): Promise<void> {
   saveConfig(config);
   show(config);
+  // A running watcher reads its settings once at startup, so without this the
+  // file and the actual behaviour disagree until the user acts on a notice
+  // they may never read ("the config says manual but it still auto-cleans").
+  // We already know a watcher is running — restart it ourselves. The restart
+  // drops what the old process held in memory: a manual-mode copy waiting for
+  // the clean hotkey, and the original held for revert. Both are momentary,
+  // and the user just changed a setting on purpose; say it anyway.
   if (runningPid() !== null) {
+    process.stdout.write('restarting the watcher so the new settings take effect…\n');
+    await stop({ disableAutostart: false });
+    await start();
     process.stdout.write(
-      'the watcher is running with the old settings — restart it to apply:\n' +
-        '  cleancopy stop && cleancopy start\n',
+      'settings are live (a copy pending the clean hotkey, or a revertible original, was discarded by the restart)\n',
     );
   }
 }
@@ -70,7 +79,7 @@ function warnNoCleanHotkey(): void {
   );
 }
 
-export function configCommand(args: string[]): void {
+export async function configCommand(args: string[]): Promise<void> {
   const { config, warnings } = loadConfig();
   for (const warning of warnings) process.stderr.write(`warning: ${warning}\n`);
 
@@ -86,7 +95,7 @@ export function configCommand(args: string[]): void {
     }
     config.mode = mode;
     if (mode === 'manual' && config.hotkeys.clean === null) warnNoCleanHotkey();
-    saveAndReport(config);
+    await saveAndReport(config);
     return;
   }
 
@@ -107,7 +116,7 @@ export function configCommand(args: string[]): void {
         fail((err as Error).message);
       }
     }
-    saveAndReport(config);
+    await saveAndReport(config);
     return;
   }
 
