@@ -141,7 +141,21 @@ export function isOurs(record: PidRecord): boolean {
 /** The validated record of a live daemon, or null (stale files are removed). */
 export function runningRecord(): PidRecord | null {
   const record = readPidRecord();
-  if (record === null) return null;
+  if (record === null) {
+    // A pid file that exists but holds no parseable record (a torn write:
+    // crash mid-write, full disk) used to be a dead end — every command said
+    // "not running", yet `start`'s exclusive create kept failing against the
+    // never-deleted file, so its log claimed "already running (pid unknown)"
+    // and only a hand-run `rm` recovered. The file carries no usable
+    // information; treat it exactly like a stale record and remove it.
+    // Re-reading before deleting keeps a fresh daemon's just-written valid
+    // record out of the blast radius. (doctor never calls this — it reads
+    // the record directly, and stays non-destructive by design.)
+    if (fs.existsSync(pidFilePath()) && readPidRecord() === null) {
+      fs.rmSync(pidFilePath(), { force: true });
+    }
+    return null;
+  }
   if (isOurs(record)) return record;
   removePidFileIfMatches(record); // stale pid file
   return null;

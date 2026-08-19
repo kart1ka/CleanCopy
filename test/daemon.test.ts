@@ -55,6 +55,19 @@ describe('pid file identity', () => {
     expect(existsSync(pidFilePath())).toBe(false); // stale file cleaned up
   });
 
+  it('recovers from a corrupt pid file instead of dead-ending', () => {
+    // A torn write used to be unrecoverable: every command said "not
+    // running", yet start's exclusive create kept failing against the
+    // never-deleted file — only a hand-run `rm` escaped. Unparseable
+    // content carries no information; it must be cleaned like a stale
+    // record so the next start can claim the file.
+    writeFileSync(pidFilePath(), 'not json at all');
+    expect(runningPid()).toBeNull();
+    expect(existsSync(pidFilePath())).toBe(false); // corrupt file cleaned up
+    expect(claimPidFile()).not.toBeNull(); // and start can claim it again
+    rmSync(pidFilePath(), { force: true });
+  });
+
   it('treats a dead process as not running', async () => {
     const child = spawn(process.execPath, ['-e', '']);
     const pid = child.pid!;
