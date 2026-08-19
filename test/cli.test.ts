@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { findUnknownArg, packageVersion, parseStopArgs } from '../src/cli';
+import { findUnknownArg, nodeTooOldMessage, packageVersion, parseStopArgs } from '../src/cli';
 
 describe('CLI metadata', () => {
   it('--version is sourced from package.json', () => {
@@ -9,6 +9,16 @@ describe('CLI metadata', () => {
       readFileSync(join(__dirname, '..', 'package.json'), 'utf8'),
     ) as { version: string };
     expect(packageVersion()).toBe(packageJson.version);
+  });
+
+  it('names the Node floor instead of dying on a missing modern global', () => {
+    // Under Node 16 the first thing reached used to be structuredClone
+    // inside config loading, so the version complaint never printed.
+    expect(nodeTooOldMessage('16.20.2', 22)).toContain('requires Node.js 22 or later');
+    expect(nodeTooOldMessage('16.20.2', 22)).toContain('v16.20.2');
+    expect(nodeTooOldMessage('20.18.1', 22)).not.toBeNull();
+    expect(nodeTooOldMessage('22.11.0', 22)).toBeNull();
+    expect(nodeTooOldMessage('23.3.0', 22)).toBeNull();
   });
 
   it('rejects arguments a subcommand does not recognize', () => {

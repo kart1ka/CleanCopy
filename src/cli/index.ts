@@ -4,7 +4,7 @@ import * as path from 'path';
 import { cleanWithReport } from '../engine';
 import { configCommand } from './config';
 import { install, runForeground, start, status, stop } from './daemon';
-import { doctor } from './doctor';
+import { doctor, requiredNodeMajor } from './doctor';
 
 // The CLI has two faces: `clean` pipes text through the engine once (the
 // dogfooding path), and start/stop/status/run manage the clipboard watcher —
@@ -90,9 +90,33 @@ function readStdin(): Promise<string> {
   });
 }
 
+/**
+ * The too-old-Node message, or null when this Node will do. npm's `engines`
+ * is advisory — installing on old Node only warns — so this gate is the real
+ * floor. It must run before any command logic: under Node 16 the first thing
+ * doctor used to reach was `structuredClone` inside config loading, so the
+ * command whose job is to say "your Node is too old" died with
+ * "structuredClone is not defined" instead.
+ */
+export function nodeTooOldMessage(nodeVersion: string, requiredMajor: number): string | null {
+  const major = Number.parseInt(nodeVersion.split('.')[0] ?? '', 10);
+  if (Number.isInteger(major) && major >= requiredMajor) return null;
+  return (
+    `cleancopy requires Node.js ${requiredMajor} or later; this is v${nodeVersion}.\n` +
+    'Upgrade Node (e.g. `nvm install ' + String(requiredMajor) + '`) and try again.\n'
+  );
+}
+
 export async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0];
+
+  const tooOld = nodeTooOldMessage(process.versions.node, requiredNodeMajor());
+  if (tooOld !== null) {
+    process.stderr.write(tooOld);
+    process.exitCode = 1;
+    return;
+  }
 
   // Unknown-option rejection, uniform across subcommands (F5): the same
   // treatment `stop` has always given `--force`, extended everywhere.

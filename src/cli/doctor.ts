@@ -85,7 +85,7 @@ function machineArchitecture(): string {
  * from what npm enforces at install time. Falls back to the known floor when
  * the installation is too damaged to read its own manifest.
  */
-function requiredNodeMajor(): number {
+export function requiredNodeMajor(): number {
   try {
     const packagePath = path.resolve(__dirname, '..', '..', 'package.json');
     const parsed: unknown = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
