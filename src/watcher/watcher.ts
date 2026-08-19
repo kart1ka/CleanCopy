@@ -208,7 +208,15 @@ export function startWatcher(options: WatcherOptions): Watcher {
       return;
     }
     if (message.type === 'hotkey-failed') {
-      log(`could not register the ${message.id} hotkey: the combo is taken by another app`);
+      // Measured reality (F14): macOS only refuses a duplicate registration
+      // within this process — clean and revert set to the same combo. A combo
+      // another app owns registers "successfully" and the presses simply go
+      // to that app; no failure is reported anywhere, so this message must
+      // not claim otherwise.
+      log(
+        `could not register the ${message.id} hotkey — are clean and revert set to the same combo? ` +
+          'check with `cleancopy config`',
+      );
       return;
     }
     if (message.type !== 'clipboard') return;
