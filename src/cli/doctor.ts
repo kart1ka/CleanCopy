@@ -6,7 +6,7 @@ import {
   resolveHelperBinary,
   stateDir,
 } from '../watcher';
-import { isLaunchAgentLoaded, plistPath } from './launchagent';
+import { installedProgram, isLaunchAgentLoaded, lastAgentExitCode, plistPath } from './launchagent';
 import { isOurs, readPidRecord } from './daemon';
 
 interface CheckResult {
@@ -200,16 +200,40 @@ export function doctor(version: string): number {
     detail: pid === null ? 'not running' : `running (pid ${pid})`,
   });
 
+  // Autostart is the one place a broken install stays invisible: launchd
+  // retries and fails in the background while `status` happily reports
+  // "enabled". Two probes close that gap. The pinned Node path vanishing
+  // (an nvm/fnm switch) is the documented common cause, so it gets its own
+  // message; any other launch failure surfaces through launchd's recorded
+  // exit status — but only when the watcher isn't running, since a live
+  // watcher makes an old non-zero exit history, not a problem.
   const installed = fs.existsSync(plistPath());
-  checks.push({
-    level: 'info',
-    label: 'autostart',
-    detail: !installed
-      ? 'not installed'
-      : isLaunchAgentLoaded()
-        ? 'installed and loaded'
-        : 'installed but not loaded',
-  });
+  if (!installed) {
+    checks.push({ level: 'info', label: 'autostart', detail: 'not installed' });
+  } else {
+    const program = installedProgram();
+    const loaded = isLaunchAgentLoaded();
+    const lastExit = loaded && pid === null ? lastAgentExitCode() : null;
+    if (program !== null && !fs.existsSync(program)) {
+      checks.push({
+        level: 'fail',
+        label: 'autostart',
+        detail: `launch agent runs ${program}, which no longer exists (Node was upgraded or switched?) — re-run \`cleancopy install\``,
+      });
+    } else if (lastExit !== null && lastExit !== 0) {
+      checks.push({
+        level: 'fail',
+        label: 'autostart',
+        detail: `launch agent is failing to start (last exit code ${lastExit}) — re-run \`cleancopy install\``,
+      });
+    } else {
+      checks.push({
+        level: 'info',
+        label: 'autostart',
+        detail: loaded ? 'installed and loaded' : 'installed but not loaded',
+      });
+    }
+  }
 
   process.stdout.write(`CleanCopy ${version} doctor\n`);
   for (const check of checks) {

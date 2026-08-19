@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
   lipoError: false,
   stateDirectory: '',
   translated: false,
+  agentLoaded: false,
+  agentProgram: null as string | null,
+  agentLastExit: null as number | null,
 }));
 
 vi.mock('child_process', () => ({
@@ -35,8 +38,10 @@ vi.mock('../src/watcher', () => ({
 }));
 
 vi.mock('../src/cli/launchagent', () => ({
-  isLaunchAgentLoaded: () => false,
+  isLaunchAgentLoaded: () => mocks.agentLoaded,
   plistPath: () => path.join(mocks.stateDirectory, 'launchagent.plist'),
+  installedProgram: () => mocks.agentProgram,
+  lastAgentExitCode: () => mocks.agentLastExit,
 }));
 
 vi.mock('../src/cli/daemon', () => ({
@@ -59,6 +64,9 @@ describe('doctor', () => {
     mocks.helperArchitectures = process.arch === 'x64' ? 'x86_64' : process.arch;
     mocks.lipoError = false;
     mocks.translated = false;
+    mocks.agentLoaded = false;
+    mocks.agentProgram = null;
+    mocks.agentLastExit = null;
     output = '';
     vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: string | Uint8Array) => {
       output += chunk.toString();
@@ -112,6 +120,40 @@ describe('doctor', () => {
     expect(doctor('test')).toBe(0);
     expect(output).toContain('warn config: invalid mode — using default');
     expect(output).toContain('ready: all required checks passed (1 warning)');
+  });
+
+  it('fails when the installed launch agent runs a Node that no longer exists', () => {
+    // The pinned-Node caveat: after an nvm/fnm switch launchd fails every
+    // launch silently while status still says "enabled". Doctor is the
+    // safety net and must say so.
+    fs.mkdirSync(mocks.stateDirectory, { recursive: true });
+    fs.writeFileSync(path.join(mocks.stateDirectory, 'launchagent.plist'), '<plist/>');
+    mocks.agentLoaded = true;
+    mocks.agentProgram = path.join(mocks.stateDirectory, 'node-that-was-removed');
+
+    expect(doctor('test')).toBe(1);
+    expect(output).toContain('!! autostart: launch agent runs');
+    expect(output).toContain('re-run `cleancopy install`');
+  });
+
+  it('fails when launchd reports the agent failing to start', () => {
+    fs.mkdirSync(mocks.stateDirectory, { recursive: true });
+    fs.writeFileSync(path.join(mocks.stateDirectory, 'launchagent.plist'), '<plist/>');
+    mocks.agentLoaded = true;
+    mocks.agentLastExit = 78; // EX_CONFIG — what a broken spawn records
+
+    expect(doctor('test')).toBe(1);
+    expect(output).toContain('!! autostart: launch agent is failing to start (last exit code 78)');
+  });
+
+  it('keeps a cleanly stopped installed agent as plain info', () => {
+    fs.mkdirSync(mocks.stateDirectory, { recursive: true });
+    fs.writeFileSync(path.join(mocks.stateDirectory, 'launchagent.plist'), '<plist/>');
+    mocks.agentLoaded = true;
+    mocks.agentLastExit = 0; // `cleancopy stop` exits 0 — not a failure
+
+    expect(doctor('test')).toBe(0);
+    expect(output).toContain('-- autostart: installed and loaded');
   });
 
   it('fails when the state-directory path is a regular file', () => {

@@ -156,6 +156,46 @@ export function isLaunchAgentLoaded(): boolean {
 }
 
 /**
+ * The program the installed plist tells launchd to run (ProgramArguments[0]),
+ * or null when no plist is readable. `install` pins the absolute path of the
+ * current Node binary, so a later nvm/fnm switch leaves this pointing at a
+ * path that no longer exists — and launchd then fails every launch silently.
+ * Reading it back lets doctor catch exactly that.
+ */
+export function installedProgram(): string | null {
+  try {
+    const xml = fs.readFileSync(plistPath(), 'utf8');
+    const match = xml.match(
+      /<key>ProgramArguments<\/key>\s*<array>\s*<string>([^<]*)<\/string>/,
+    );
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * launchd's recorded exit status for the agent's most recent run, or null when
+ * it isn't loaded or has never exited. A failed spawn is recorded here too
+ * (78 EX_CONFIG when ProgramArguments[0] cannot be executed) — launchd knows
+ * why the agent is dead even when nothing else does.
+ */
+export function lastAgentExitCode(): number | null {
+  if (process.platform !== 'darwin') return null;
+  try {
+    const out = execFileSync(
+      'launchctl',
+      ['print', `${domainTarget()}/${LAUNCH_AGENT_LABEL}`],
+      { stdio: 'pipe' },
+    ).toString();
+    const match = out.match(/last exit code\s*=\s*(\d+)/);
+    return match ? Number(match[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Write the plist and (re)load it into launchd. Idempotent: any already-loaded
  * instance is dropped first. Throws if launchctl refuses to bootstrap.
  */
