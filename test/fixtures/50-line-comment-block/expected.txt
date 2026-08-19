@@ -1,0 +1,5 @@
+// Which apps count as "a terminal"? Copies from anything else are discarded
+// immediately — the engine never even sees them. Deliberately conservative:
+// apps where copied text is sometimes terminal-ish (editors with built-in
+// terminals, like VS Code) are excluded, because most copies from them are
+// source code from the editor pane.

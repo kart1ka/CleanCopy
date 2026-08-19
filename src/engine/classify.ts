@@ -100,6 +100,9 @@ export function classify(block: Block): Classification {
   if (looksLikeShellCommands(lines)) {
     return verbatim('code', [...signals, 'shell-command-sequence']);
   }
+  if (looksLikeLineComments(lines)) {
+    return verbatim('code', [...signals, 'line-comment-block']);
+  }
   if (looksLikeCode(lines, text)) {
     return verbatim('code', [...signals, 'code-shaped']);
   }
@@ -145,6 +148,22 @@ function looksLikeShellCommands(lines: string[]): boolean {
   // Still demand two known command words: the compatible shapes alone are too
   // thin to freeze a block on (a lone `~/notes/` line inside prose must not).
   return commandLines >= 2;
+}
+
+// A comment paragraph copied out of source code IS English prose — uniform
+// line lengths, sentences running across the breaks — so every prose signal
+// fires and the markers end up glued mid-sentence ("... discarded //
+// immediately ..."). The markers themselves are the structure: a block where
+// every line opens with the same line-comment marker is code, whatever the
+// words after the marker read like. `#`, `--` and `%` blocks were already
+// frozen incidentally (prompt, diff and other guards); `//` and `;` were not.
+const LINE_COMMENT_MARKERS = ['//', ';', '#', '--', '%'];
+
+function looksLikeLineComments(lines: string[]): boolean {
+  if (lines.length < 2) return false;
+  return LINE_COMMENT_MARKERS.some((marker) =>
+    lines.every((l) => l.trimStart().startsWith(marker)),
+  );
 }
 
 function verbatim(type: Classification['type'], signals: string[]): Classification {

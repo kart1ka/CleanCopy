@@ -1,0 +1,5 @@
+/**
+ * Extra bundle ids can be added via the environment variable until the
+ * real config support lands, and the parser trims whitespace around
+ * every entry before comparing.
+ */

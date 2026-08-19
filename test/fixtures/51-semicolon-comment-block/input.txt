@@ -1,0 +1,3 @@
+; This routine walks the directory tree and collects every file that
+; matches the given pattern, skipping anything the ignore list already
+; mentions, and returns them sorted by modification time.
