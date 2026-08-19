@@ -1,0 +1,3 @@
+That's the product working, on a real copy of yours. Let me read the explanation back in plain terms, because it is genuinely worth understanding before the next section runs.
+
+Channel separation passed: cleaned text only in the first section, commentary only in the second one. Nothing would have leaked into your clipboard during the entire check.

@@ -1,0 +1,4 @@
+Example session transcript:
+
+    const parsed = JSON.parse(raw);
+    render(parsed.items);

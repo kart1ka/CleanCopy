@@ -1,0 +1,2 @@
+def compute_totals():
+    return sum(values)
