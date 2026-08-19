@@ -52,8 +52,13 @@ const CODE_STATEMENT = new RegExp(
 const CODE_SYMBOLS = /[{}\[\]<>;=|\\`]/g;
 // A sequence of plain commands often has no prompt or shell punctuation at
 // all (`git checkout feature`, `brew update`, ...), so the general code-shape
-// guards cannot recognize it. Keep this deliberately conservative: only a
-// multi-line block where every line starts with a common command is protected.
+// guards cannot recognize it. Two tells work together: a line starting with a
+// common command word (below), and a line that is command-shaped without one —
+// an env-var prefix (`CLEANCOPY_STATE_DIR=/tmp cleancopy run`), a path
+// invocation (`./deploy.sh`), or a trailing `\` continuation. Requiring every
+// line to start with a listed command word made one unlisted line reclassify
+// the whole block as prose and weld the commands together — the exact
+// destructive failure the guard exists to prevent.
 const SHELL_COMMAND = new RegExp(
   '^\\s*(?:' +
     [
@@ -118,8 +123,28 @@ export function classify(block: Block): Classification {
   return verbatim('other', [...signals, 'uncertain']);
 }
 
+// Command-shaped without starting with a known command word. Each shape is
+// something prose essentially never does at these positions: an env-var
+// assignment glued to its value, a leading path, or a shell line continuation.
+const SHELL_COMPATIBLE = [
+  /^\s*[A-Za-z_][A-Za-z0-9_]*=\S/, // VAR=value prefix (no spaces around =)
+  /^\s*(?:\.{1,2}\/|~\/|\/)\S/, // ./script.sh, ../bin/x, ~/bin/x, /usr/bin/x
+  /\\\s*$/, // trailing backslash continuation
+];
+
 function looksLikeShellCommands(lines: string[]): boolean {
-  return lines.length >= 2 && lines.every((line) => SHELL_COMMAND.test(line));
+  if (lines.length < 2) return false;
+  let commandLines = 0;
+  for (const line of lines) {
+    if (SHELL_COMMAND.test(line)) {
+      commandLines += 1;
+    } else if (!SHELL_COMPATIBLE.some((r) => r.test(line))) {
+      return false; // a line that is neither a command nor command-shaped
+    }
+  }
+  // Still demand two known command words: the compatible shapes alone are too
+  // thin to freeze a block on (a lone `~/notes/` line inside prose must not).
+  return commandLines >= 2;
 }
 
 function verbatim(type: Classification['type'], signals: string[]): Classification {

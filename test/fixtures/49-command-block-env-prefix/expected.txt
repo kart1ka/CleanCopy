@@ -1,0 +1,4 @@
+mv helper/bin/cleancopy-helper /tmp/helper-hidden
+CLEANCOPY_STATE_DIR=/tmp/cc-broken node dist/cli/index.js run
+mv /tmp/helper-hidden helper/bin/cleancopy-helper
+ls -l helper/bin/cleancopy-helper
