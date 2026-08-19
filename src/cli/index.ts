@@ -68,6 +68,18 @@ export function parseStopArgs(args: string[]): { disableAutostart: boolean } {
   return { disableAutostart: args.includes('--disable-autostart') };
 }
 
+/**
+ * The first argument the command does not recognize, or undefined when they
+ * are all known. Every subcommand runs this before doing anything (for
+ * `clean`, before stdin is read, so a typo fails fast instead of after a 2 MB
+ * paste): a mistyped `--explian` silently cleaning without an explanation
+ * looks like the flag does nothing. Pre-1.0 is the only cheap moment to make
+ * this strict — after publish, tightening it would break callers.
+ */
+export function findUnknownArg(args: string[], allowed: string[] = []): string | undefined {
+  return args.find((arg) => !allowed.includes(arg));
+}
+
 function readStdin(): Promise<string> {
   return new Promise((resolve) => {
     if (process.stdin.isTTY) return resolve('');
@@ -81,6 +93,16 @@ function readStdin(): Promise<string> {
 export async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0];
+
+  // Unknown-option rejection, uniform across subcommands (F5): the same
+  // treatment `stop` has always given `--force`, extended everywhere.
+  const rejectUnknown = (name: string, rest: string[], allowed: string[] = []): boolean => {
+    const unknown = findUnknownArg(rest, allowed);
+    if (unknown === undefined) return false;
+    process.stderr.write(`Unknown ${name} option: ${unknown}\n\n${HELP}`);
+    process.exitCode = 1;
+    return true;
+  };
 
   // A relative state-dir override resolves against each command's cwd, so
   // `start` here and `stop` there would track different pid files. Warn once,
@@ -104,6 +126,7 @@ export async function main(): Promise<void> {
   }
 
   if (command === 'clean') {
+    if (rejectUnknown('clean', args.slice(1), ['--explain'])) return;
     const explain = args.includes('--explain');
     const input = await readStdin();
     const { text, reports, inferredWidth } = cleanWithReport(input, { explain });
@@ -137,10 +160,12 @@ export async function main(): Promise<void> {
   }
 
   if (command === 'run') {
+    if (rejectUnknown('run', args.slice(1))) return;
     runForeground();
     return;
   }
   if (command === 'start') {
+    if (rejectUnknown('start', args.slice(1))) return;
     await start();
     return;
   }
@@ -157,14 +182,17 @@ export async function main(): Promise<void> {
     return;
   }
   if (command === 'status') {
+    if (rejectUnknown('status', args.slice(1))) return;
     status();
     return;
   }
   if (command === 'doctor') {
+    if (rejectUnknown('doctor', args.slice(1))) return;
     process.exitCode = doctor(packageVersion());
     return;
   }
   if (command === 'install') {
+    if (rejectUnknown('install', args.slice(1))) return;
     await install();
     return;
   }
