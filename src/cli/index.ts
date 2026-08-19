@@ -206,6 +206,19 @@ export async function main(): Promise<void> {
 }
 
 if (require.main === module) {
+  // When the reader of our output goes away first — `cleancopy status |
+  // head -1`, `doctor | grep -q ready`, quitting `less` mid-page — further
+  // writes fail with EPIPE. Unhandled, that becomes a 25-line Node crash dump
+  // from exactly the commands a worried user pipes into things. The output
+  // the reader wanted was already delivered; ending quietly is the only
+  // right behaviour. Handled on both streams: stderr can be piped too.
+  for (const stream of [process.stdout, process.stderr]) {
+    stream.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EPIPE') process.exit(0);
+      throw err;
+    });
+  }
+
   // A thrown startup error (e.g. the helper binary missing from a broken
   // install) must surface as its one-line message, not an unhandled-rejection
   // stack trace — this is the first thing a user with a broken install sees.
