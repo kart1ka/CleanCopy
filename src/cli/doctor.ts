@@ -49,8 +49,15 @@ interface ArchitectureInspection {
 function helperArchitectures(helperPath: string): ArchitectureInspection {
   try {
     return {
+      // stdio: capture lipo's stderr instead of letting it inherit ours. On
+      // a non-Mach-O file lipo prints "fatal error: ... can't figure out the
+      // architecture type" — with inheritance that landed on screen ABOVE
+      // doctor's own verdict, which is only a warning and exit 0. A health
+      // check must not open with another tool's "fatal error"; the message
+      // is already summarised inside the warn line.
       architectures: execFileSync('/usr/bin/lipo', ['-archs', helperPath], {
         encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
       })
         .trim()
         .split(/\s+/)
