@@ -115,6 +115,17 @@ export async function configCommand(args: string[]): Promise<void> {
       } catch (err) {
         fail((err as Error).message);
       }
+      // macOS registers a combo once per process: with both hotkeys on the
+      // same combo, the first registration wins and the other silently never
+      // fires. The watcher logs it, but the user has no reason to read the
+      // log — this moment, when they typed the duplicate, is when to say so.
+      const other = which === 'clean' ? 'revert' : 'clean';
+      if (config.hotkeys[which] === config.hotkeys[other]) {
+        process.stderr.write(
+          `note: clean and revert are now both ${config.hotkeys[which]} — only one of them ` +
+            'will actually fire. Give one of them a different combo.\n',
+        );
+      }
     }
     await saveAndReport(config);
     return;
