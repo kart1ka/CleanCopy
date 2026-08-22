@@ -1,0 +1,8 @@
+export async function start(): Promise<void> {
+  const existing = runningPid();
+  if (existing !== null) {
+    return;
+  }
+
+  await claimAndSpawn();
+}

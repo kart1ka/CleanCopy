@@ -1,0 +1,6 @@
+class Deploy:
+    def run(self):
+        self.push()
+
+    def stop(self):
+        self.halt()

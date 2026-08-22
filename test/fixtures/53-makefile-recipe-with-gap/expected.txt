@@ -1,0 +1,4 @@
+release: build test lint
+	npm version patch --no-git-tag-version
+
+	npm run build

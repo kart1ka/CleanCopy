@@ -69,68 +69,7 @@ export function normalize(input: string): string {
  * clean(clean(x)) === clean(x) when a join absorbs the only flush-left line.
  */
 export function stripRenderMargin(text: string): string {
-  if (isIndentedListFragment(text)) return text;
-  const stripped = stripCommonMargin(text);
-  return stripped !== text ? stripped : stripTornFirstLineMargin(text);
-}
-
-/**
- * The drag-select case stripCommonMargin cannot see: selecting from the first
- * *character* of the text leaves line 1 without its render margin (the drag
- * started inside it) while every wrapped line below keeps it. One flush-left
- * line empties the common prefix, so nothing was stripped and the paste came
- * out lopsided — paragraph 1 flush, everything after it indented.
- *
- * Strip the margin the rest of the lines share when the flush first line is
- * demonstrably torn, not structural:
- *   - it is the ONLY flush-left line (all others share a non-empty margin);
- *   - it runs straight into the next line with no blank between — a heading
- *     or label above an indented example sits in its own block and is left
- *     alone;
- *   - the text spans 2+ blank-separated blocks, so a lone `def foo():` with
- *     its indented body cannot be flattened.
- * Idempotent: the output has 2+ flush-left lines, so a second pass strips
- * nothing — which keeps clean(clean(x)) === clean(x).
- */
-function stripTornFirstLineMargin(text: string): string {
-  const lines = text.split('\n');
-  const nonBlank: number[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].trim() !== '') nonBlank.push(i);
-  }
-  if (nonBlank.length < 3) return text;
-
-  const first = nonBlank[0];
-  if (/^[ \t]/.test(lines[first])) return text; // first line is not flush
-  if (lines[first + 1]?.trim() === '') return text; // first line is its own block
-
-  // 2+ blocks: some blank line between the first and last non-blank lines.
-  const last = nonBlank[nonBlank.length - 1];
-  let hasBlockBreak = false;
-  for (let i = first + 1; i < last; i++) {
-    if (lines[i].trim() === '') hasBlockBreak = true;
-  }
-  if (!hasBlockBreak) return text;
-
-  // Common literal margin of every non-blank line after the first.
-  let margin: string | null = null;
-  for (const i of nonBlank.slice(1)) {
-    const indent = lines[i].match(/^[ \t]*/)?.[0] ?? '';
-    if (margin === null) {
-      margin = indent;
-    } else {
-      let j = 0;
-      while (j < margin.length && j < indent.length && margin[j] === indent[j]) j++;
-      margin = margin.slice(0, j);
-    }
-    if (margin === '') return text; // another flush line ⇒ not the torn case
-  }
-  if (!margin) return text;
-
-  const width = margin.length;
-  return lines
-    .map((line, i) => (i === first || line.trim() === '' ? line : line.slice(width)))
-    .join('\n');
+  return isIndentedListFragment(text) ? text : stripCommonMargin(text);
 }
 
 function isIndentedListFragment(text: string): boolean {
