@@ -38,8 +38,20 @@ export function logFilePath(): string {
  */
 export function resolveHelperBinary(): string {
   const packageRoot = path.resolve(__dirname, '..', '..');
+  // An explicit override is a statement of intent: silently running a
+  // different binary than the one named hides the user's typo and, in a
+  // debugging session, sends them chasing behaviour from a helper they
+  // thought they had replaced. A mis-set CLEANCOPY_HELPER baked into a
+  // LaunchAgent plist would otherwise never surface anywhere.
+  const override = process.env.CLEANCOPY_HELPER;
+  if (override && !fs.existsSync(override)) {
+    throw new Error(
+      `CLEANCOPY_HELPER is set to ${override}, which does not exist. ` +
+        'Fix or unset it to use the bundled helper.',
+    );
+  }
   const candidates = [
-    process.env.CLEANCOPY_HELPER,
+    override,
     path.join(packageRoot, 'helper', 'bin', 'cleancopy-helper'),
     path.join(packageRoot, 'helper', '.build', 'release', 'cleancopy-helper'),
   ].filter((p): p is string => Boolean(p));
