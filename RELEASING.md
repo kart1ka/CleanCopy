@@ -2,6 +2,9 @@
 
 The whole flow, for 1.0.0 and every release after it. One rule above all:
 never publish from a laptop — the GitHub release triggers the only publish
+(and `prepublishOnly` enforces it: outside CI it exits 1 before building,
+so a stray local `npm publish` cannot get anywhere; `npm run release:check`
+remains the local dry-run)
 path.
 
 ## 1. Preflight
