@@ -22,7 +22,7 @@ Usage:
   cleancopy config hotkey <which> off       disable that hotkey
 
 A combo is modifiers + one key, joined by "+": e.g. "cmd+ctrl+c",
-"cmd+shift+v", "ctrl+alt+f9". At least one modifier is required.
+"cmd+shift+v", "ctrl+opt+f9". At least one modifier is required.
 `;
 
 function show(config: Config): void {

@@ -34,8 +34,10 @@ describe('normalizeHotkey', () => {
     expect(normalizeHotkey('cmd+ctrl+c')).toBe('cmd+ctrl+c');
     expect(normalizeHotkey('Shift+CMD+V')).toBe('cmd+shift+v');
     expect(normalizeHotkey('control+command+z')).toBe('cmd+ctrl+z');
-    expect(normalizeHotkey('option+ctrl+f9')).toBe('ctrl+alt+f9');
-    expect(normalizeHotkey('opt+cmd+space')).toBe('cmd+alt+space');
+    expect(normalizeHotkey('option+ctrl+f9')).toBe('ctrl+opt+f9');
+    expect(normalizeHotkey('opt+cmd+space')).toBe('cmd+opt+space');
+    // alt remains an accepted alias, normalized to the macOS name
+    expect(normalizeHotkey('alt+cmd+space')).toBe('cmd+opt+space');
   });
 
   it('accepts letters, digits, f-keys, and the named keys', () => {

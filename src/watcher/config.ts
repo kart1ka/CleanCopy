@@ -52,14 +52,19 @@ const MODIFIER_ALIASES: Record<string, string> = {
   command: 'cmd',
   ctrl: 'ctrl',
   control: 'ctrl',
-  alt: 'alt',
-  option: 'alt',
-  opt: 'alt',
+  // Canonical is `opt`: this is a macOS-only tool and Apple's name for the
+  // key is Option (⌥) — echoing back `alt` for a user who typed `option`
+  // creates the "did it understand me?" moment the aliases exist to prevent.
+  // `alt` stays accepted (many non-US keycaps print it, and it is the common
+  // cross-platform spelling); the Swift parser accepts all three spellings.
+  opt: 'opt',
+  option: 'opt',
+  alt: 'opt',
   shift: 'shift',
 };
 
 /** Canonical modifier order, so equal combos normalize to equal strings. */
-const MODIFIER_ORDER = ['cmd', 'ctrl', 'alt', 'shift'] as const;
+const MODIFIER_ORDER = ['cmd', 'ctrl', 'opt', 'shift'] as const;
 
 const NAMED_KEYS = new Set([
   'space', 'tab', 'return', 'escape', 'delete',
@@ -102,7 +107,7 @@ export function normalizeHotkey(spec: string): string {
   if (modifiers.size === 0) {
     throw new Error(
       `invalid hotkey "${spec}": a global hotkey needs at least one modifier ` +
-        '(cmd, ctrl, alt, shift) or it would swallow ordinary typing',
+        '(cmd, ctrl, opt, shift) or it would swallow ordinary typing',
     );
   }
   const ordered = MODIFIER_ORDER.filter((m) => modifiers.has(m));
