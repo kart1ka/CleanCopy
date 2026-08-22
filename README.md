@@ -58,26 +58,34 @@ With the watcher running, copies made while a supported terminal is frontmost
 are cleaned in place. Copy, then paste as usual.
 
 The default `auto` mode cleans eligible terminal copies as they land. To clean
-only when you ask, switch to `manual` mode and use the clean hotkey:
+only when you ask, switch to `manual` mode:
 
 ```bash
 cleancopy config mode manual
-cleancopy config hotkey clean cmd+ctrl+c
-cleancopy config hotkey revert cmd+ctrl+z
 ```
+
+In manual mode the gesture is a double copy: press Cmd+C once to copy the text
+raw, and press it again, same selection, within about half a second, to clean
+it. That second copy is the entire trigger. There is no extra hotkey to learn
+and no macOS permission to grant, because CleanCopy detects the repeat from
+the clipboard itself. A near-instant second copy (under about 150 ms, faster
+than a person presses twice) is deliberately ignored, so clipboard utilities
+that rewrite every copy the moment it lands cannot trigger cleans you never
+asked for.
 
 Changed settings apply immediately: if the watcher is running, `cleancopy
 config` restarts it for you.
 
-The revert hotkey restores the original text only when the cleaned copy is
-still current; it never overwrites a newer clipboard item.
+The revert hotkey (default `cmd+ctrl+z`; change it with `cleancopy config
+hotkey revert <combo>`, or disable it with `off`) restores the original text
+only when the cleaned copy is still current; it never overwrites a newer
+clipboard item.
 
-If a hotkey does nothing when pressed, another app probably owns that combo
-already. macOS gives the keystroke to whichever app registered it first and
-reports no conflict to anyone, so CleanCopy cannot warn you — pick a
-different combo (`cleancopy config hotkey clean cmd+ctrl+shift+c`). Run `cleancopy
-config` to see the active mode and hotkeys. Use `off` in place of a key
-combination to disable either hotkey.
+If the revert hotkey does nothing when pressed, another app probably owns that
+combo already. macOS gives the keystroke to whichever app registered it first
+and reports no conflict to anyone, so CleanCopy cannot warn you — pick a
+different combo (`cleancopy config hotkey revert cmd+ctrl+shift+z`). Run
+`cleancopy config` to see the active mode and hotkey.
 
 To start CleanCopy automatically when you log in:
 

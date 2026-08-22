@@ -9,8 +9,13 @@ import { ensureStateDir, stateDir } from './paths';
 //   ~/.cleancopy/config.json
 //   {
 //     "mode": "manual",
-//     "hotkeys": { "clean": "cmd+ctrl+c", "revert": "cmd+ctrl+z" }
+//     "hotkeys": { "revert": "cmd+ctrl+z" }
 //   }
+//
+// Manual mode is triggered by the double-copy gesture (copy the same text
+// twice in quick succession), detected from the pasteboard alone — so there
+// is no clean hotkey, and revert is the only hotkey that exists. A
+// "hotkeys.clean" key left over in an old config file is silently unread.
 //
 // A broken or hand-mangled config must never keep the watcher from starting:
 // loadConfig() falls back to defaults field by field and reports what it had
@@ -19,8 +24,6 @@ import { ensureStateDir, stateDir } from './paths';
 export type CleanMode = 'auto' | 'manual';
 
 export interface Hotkeys {
-  /** Cleans the most recent terminal copy. Only registered in manual mode. */
-  clean: string | null;
   /** Restores the pre-clean original of the last cleaned copy. */
   revert: string | null;
 }
@@ -34,7 +37,7 @@ export interface Config {
 
 export const DEFAULT_CONFIG: Config = {
   mode: 'auto',
-  hotkeys: { clean: 'cmd+ctrl+c', revert: 'cmd+ctrl+z' },
+  hotkeys: { revert: 'cmd+ctrl+z' },
 };
 
 export function configFilePath(): string {
@@ -182,7 +185,6 @@ export function loadConfig(): LoadedConfig {
     config: {
       mode,
       hotkeys: {
-        clean: readHotkey(hotkeysRecord.clean, 'clean', DEFAULT_CONFIG.hotkeys.clean, warnings),
         revert: readHotkey(hotkeysRecord.revert, 'revert', DEFAULT_CONFIG.hotkeys.revert, warnings),
       },
     },

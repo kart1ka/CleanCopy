@@ -243,12 +243,13 @@ process.stdin.on('end', () => process.exit(0));
     }
   });
 
-  it('in manual mode, cleans only when the clean hotkey fires', async () => {
+  it('in manual mode, cleans only on the double-copy gesture', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'cleancopy-manual-'));
     const outPath = join(dir, 'received.jsonl');
 
-    // Ready → a Safari copy (must vanish) → a terminal copy (must wait) →
-    // the clean hotkey. Argv is recorded so the hotkey flags are checkable.
+    // Ready → a Safari copy (must vanish) → a terminal copy (noted, not
+    // cleaned) → the same terminal copy again 200 ms later (the gesture).
+    // Argv is recorded so the hotkey flags are checkable.
     const fakeHelper = join(dir, 'fake-helper.js');
     writeFileSync(
       fakeHelper,
@@ -259,7 +260,7 @@ fs.appendFileSync(${JSON.stringify(outPath)}, JSON.stringify({ argv: process.arg
 console.log(JSON.stringify({ type: 'ready' }));
 console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.apple.Safari', appName: 'Safari', text, changeCount: 4 }));
 console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.googlecode.iterm2', appName: 'iTerm2', text, changeCount: 5 }));
-setTimeout(() => console.log(JSON.stringify({ type: 'hotkey', id: 'clean' })), 150);
+setTimeout(() => console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.googlecode.iterm2', appName: 'iTerm2', text, changeCount: 6 })), 200);
 process.stdin.on('data', (d) => fs.appendFileSync(${JSON.stringify(outPath)}, d));
 process.stdin.on('end', () => process.exit(0));
 `,
@@ -271,7 +272,12 @@ process.stdin.on('end', () => process.exit(0));
       helperPath: fakeHelper,
       log: (l) => logLines.push(l),
       mode: 'manual',
-      hotkeys: { clean: 'cmd+ctrl+c', revert: 'cmd+ctrl+z' },
+      hotkeys: { revert: 'cmd+ctrl+z' },
+      // A slow CI machine can stretch the 200 ms stub delay well past the
+      // real window; the bounds under test are the detection logic, not the
+      // production calibration.
+      doubleCopyMinGapMs: 50,
+      doubleCopyMaxGapMs: 2500,
     });
     try {
       // Wait on the received file, not the log: "cleaned copy" is logged when
@@ -286,24 +292,21 @@ process.stdin.on('end', () => process.exit(0));
       }
       const received = readFileSync(outPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
 
-      // Both hotkeys were passed to the helper (manual mode registers both)...
-      expect(received[0].argv).toEqual([
-        '--hotkey', 'clean:cmd+ctrl+c',
-        '--hotkey', 'revert:cmd+ctrl+z',
-      ]);
-      // ...and exactly one write happened — for the terminal copy, only after
-      // the hotkey, pinned to that copy's changeCount.
+      // No clean hotkey exists any more — revert is the only registration...
+      expect(received[0].argv).toEqual(['--hotkey', 'revert:cmd+ctrl+z']);
+      // ...and exactly one write happened — for the second terminal copy,
+      // pinned to ITS changeCount.
       expect(received.slice(1)).toEqual([
-        { type: 'write', text: clean(wrappedProse), expectedChangeCount: 5 },
+        { type: 'write', text: clean(wrappedProse), expectedChangeCount: 6 },
       ]);
 
-      // The terminal copy was noted (with the hotkey to press) before it was
-      // cleaned; the Safari copy left no trace at all.
+      // The first terminal copy was noted (with the gesture hint) before the
+      // second was cleaned; the Safari copy left no trace at all.
       const noted = logLines.findIndex((l) => l.includes('terminal copy from iTerm2 noted'));
       const cleaned = logLines.findIndex((l) => l.startsWith('cleaned copy from iTerm2'));
       expect(noted).toBeGreaterThanOrEqual(0);
       expect(cleaned).toBeGreaterThan(noted);
-      expect(logLines[noted]).toContain('press cmd+ctrl+c');
+      expect(logLines[noted]).toContain('copy it again');
       expect(logLines.join('\n')).not.toContain('Safari');
     } finally {
       watcher.stop();
@@ -311,7 +314,153 @@ process.stdin.on('end', () => process.exit(0));
     }
   });
 
-  it('in auto mode, registers only the revert hotkey and reverts on it', async () => {
+  it('rejects a too-fast identical pair (a clipboard tool rewrite), then cleans on a real second copy', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cleancopy-toofast-'));
+    const outPath = join(dir, 'received.jsonl');
+
+    // Two identical copies back to back (milliseconds apart — the shape a
+    // Pure-Paste-style rewrite produces) must NOT clean: accepting them would
+    // turn manual mode into auto mode for anyone running such a tool. The
+    // rejected copy re-anchors, so the user's deliberate copy 250 ms later
+    // still completes a gesture.
+    const fakeHelper = join(dir, 'fake-helper.js');
+    writeFileSync(
+      fakeHelper,
+      `#!/usr/bin/env node
+const fs = require('fs');
+const text = ${JSON.stringify(wrappedProse)};
+console.log(JSON.stringify({ type: 'ready' }));
+console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.googlecode.iterm2', appName: 'iTerm2', text, changeCount: 7 }));
+console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.googlecode.iterm2', appName: 'iTerm2', text, changeCount: 8 }));
+setTimeout(() => console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.googlecode.iterm2', appName: 'iTerm2', text, changeCount: 9 })), 250);
+process.stdin.on('data', (d) => fs.appendFileSync(${JSON.stringify(outPath)}, d));
+process.stdin.on('end', () => process.exit(0));
+`,
+    );
+    chmodSync(fakeHelper, 0o755);
+
+    const logLines: string[] = [];
+    const watcher = startWatcher({
+      helperPath: fakeHelper,
+      log: (l) => logLines.push(l),
+      mode: 'manual',
+      doubleCopyMinGapMs: 130,
+      doubleCopyMaxGapMs: 2500,
+    });
+    try {
+      const deadline = Date.now() + 3000;
+      while (
+        !(existsSync(outPath) && readFileSync(outPath, 'utf8').includes('"type":"write"')) &&
+        Date.now() < deadline
+      ) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      const received = readFileSync(outPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+      // Exactly one write, pinned to the THIRD copy — the instant pair
+      // produced nothing.
+      expect(received).toEqual([
+        { type: 'write', text: clean(wrappedProse), expectedChangeCount: 9 },
+      ]);
+    } finally {
+      watcher.stop();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('treats a slow re-copy of the same text as a fresh copy, not a gesture', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cleancopy-tooslow-'));
+    const outPath = join(dir, 'received.jsonl');
+
+    const fakeHelper = join(dir, 'fake-helper.js');
+    writeFileSync(
+      fakeHelper,
+      `#!/usr/bin/env node
+const fs = require('fs');
+const text = ${JSON.stringify(wrappedProse)};
+console.log(JSON.stringify({ type: 'ready' }));
+console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.googlecode.iterm2', appName: 'iTerm2', text, changeCount: 4 }));
+setTimeout(() => console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.googlecode.iterm2', appName: 'iTerm2', text, changeCount: 5 })), 400);
+process.stdin.on('data', (d) => fs.appendFileSync(${JSON.stringify(outPath)}, d));
+process.stdin.on('end', () => process.exit(0));
+`,
+    );
+    chmodSync(fakeHelper, 0o755);
+
+    const logLines: string[] = [];
+    const watcher = startWatcher({
+      helperPath: fakeHelper,
+      log: (l) => logLines.push(l),
+      mode: 'manual',
+      doubleCopyMinGapMs: 50,
+      doubleCopyMaxGapMs: 150, // the 400 ms re-copy falls outside the window
+    });
+    try {
+      const deadline = Date.now() + 3000;
+      while (
+        logLines.filter((l) => l.includes('noted')).length < 2 &&
+        Date.now() < deadline
+      ) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      await new Promise((r) => setTimeout(r, 150)); // settle: a write would land now
+      // Both copies merely noted; nothing was ever written.
+      expect(logLines.filter((l) => l.includes('terminal copy from iTerm2 noted'))).toHaveLength(2);
+      expect(existsSync(outPath)).toBe(false);
+    } finally {
+      watcher.stop();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('an intervening copy from any app breaks a double-copy pair', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cleancopy-intervene-'));
+    const outPath = join(dir, 'received.jsonl');
+
+    // Terminal copy → Safari copy → the same terminal text again, all within
+    // the window. The halves of the gesture are no longer consecutive, so
+    // nothing may be cleaned.
+    const fakeHelper = join(dir, 'fake-helper.js');
+    writeFileSync(
+      fakeHelper,
+      `#!/usr/bin/env node
+const fs = require('fs');
+const text = ${JSON.stringify(wrappedProse)};
+console.log(JSON.stringify({ type: 'ready' }));
+console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.googlecode.iterm2', appName: 'iTerm2', text, changeCount: 4 }));
+setTimeout(() => console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.apple.Safari', appName: 'Safari', text: 'something else', changeCount: 5 })), 150);
+setTimeout(() => console.log(JSON.stringify({ type: 'clipboard', bundleId: 'com.googlecode.iterm2', appName: 'iTerm2', text, changeCount: 6 })), 300);
+process.stdin.on('data', (d) => fs.appendFileSync(${JSON.stringify(outPath)}, d));
+process.stdin.on('end', () => process.exit(0));
+`,
+    );
+    chmodSync(fakeHelper, 0o755);
+
+    const logLines: string[] = [];
+    const watcher = startWatcher({
+      helperPath: fakeHelper,
+      log: (l) => logLines.push(l),
+      mode: 'manual',
+      doubleCopyMinGapMs: 50,
+      doubleCopyMaxGapMs: 2500,
+    });
+    try {
+      const deadline = Date.now() + 3000;
+      while (
+        logLines.filter((l) => l.includes('noted')).length < 2 &&
+        Date.now() < deadline
+      ) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      await new Promise((r) => setTimeout(r, 150)); // settle: a write would land now
+      expect(existsSync(outPath)).toBe(false); // not a single write
+      expect(logLines.join('\n')).not.toContain('Safari');
+    } finally {
+      watcher.stop();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('registers the revert hotkey and reverts on it', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'cleancopy-revert-'));
     const outPath = join(dir, 'received.jsonl');
 
@@ -346,7 +495,7 @@ process.stdin.on('end', () => process.exit(0));
       helperPath: fakeHelper,
       log: (l) => logLines.push(l),
       mode: 'auto',
-      hotkeys: { clean: 'cmd+ctrl+c', revert: 'cmd+ctrl+z' },
+      hotkeys: { revert: 'cmd+ctrl+z' },
     });
     try {
       const deadline = Date.now() + 3000;
@@ -358,7 +507,7 @@ process.stdin.on('end', () => process.exit(0));
       }
       const received = readFileSync(outPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
 
-      // Auto mode has no use for the clean hotkey; only revert is registered.
+      // Revert is the only hotkey that exists.
       expect(received[0].argv).toEqual(['--hotkey', 'revert:cmd+ctrl+z']);
       expect(received.slice(1)).toEqual([
         { type: 'write', text: clean(wrappedProse), expectedChangeCount: 7 },
@@ -437,10 +586,12 @@ process.stdin.on('end', () => process.exit(0));
     }
   });
 
-  it('does nothing on hotkeys with nothing to act on', async () => {
+  it('does nothing on an idle revert and ignores unknown hotkey ids', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'cleancopy-hotkey-idle-'));
     const outPath = join(dir, 'received.jsonl');
 
+    // "clean" is no longer a hotkey id (double-copy replaced it) — a helper
+    // reporting one must be shrugged off, not acted on.
     const fakeHelper = join(dir, 'fake-helper.js');
     writeFileSync(
       fakeHelper,
@@ -460,7 +611,7 @@ process.stdin.on('end', () => process.exit(0));
       helperPath: fakeHelper,
       log: (l) => logLines.push(l),
       mode: 'manual',
-      hotkeys: { clean: 'cmd+ctrl+c', revert: 'cmd+ctrl+z' },
+      hotkeys: { revert: 'cmd+ctrl+z' },
     });
     try {
       const deadline = Date.now() + 3000;
@@ -470,7 +621,7 @@ process.stdin.on('end', () => process.exit(0));
       ) {
         await new Promise((r) => setTimeout(r, 25));
       }
-      expect(logLines.join('\n')).toContain('no terminal copy to clean');
+      expect(logLines.join('\n')).toContain('ignored unknown hotkey "clean"');
       expect(logLines.join('\n')).toContain('no cleaned copy to revert');
       expect(existsSync(outPath)).toBe(false); // not a single write
     } finally {

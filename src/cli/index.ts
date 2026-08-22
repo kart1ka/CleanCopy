@@ -35,9 +35,8 @@ so the cleaned text on stdout stays pipeable.
 
 Settings (cleancopy config …):
   mode auto|manual               auto (default) cleans every terminal copy;
-                                 manual cleans only when the clean hotkey
-                                 (default cmd+ctrl+c) is pressed after a copy
-  hotkey clean <combo>|off       the manual-clean hotkey
+                                 manual cleans only on double-copy — copy the
+                                 same text twice, quickly (cmd+c cmd+c)
   hotkey revert <combo>|off      pressing it (default cmd+ctrl+z) after a
                                  clean puts the original copy back
 

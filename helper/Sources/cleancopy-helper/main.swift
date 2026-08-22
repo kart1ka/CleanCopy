@@ -36,7 +36,12 @@ import Foundation
 // --- arguments -------------------------------------------------------------
 
 var pasteboardName: NSPasteboard.Name? = nil
-var pollInterval: TimeInterval = 0.2
+// 100 ms, not 200: manual mode's double-copy gesture is detected from the
+// timestamps at which the poll REPORTS the two copies, so the poll interval
+// is the timing resolution. At 200 ms a fast double-press too often lands
+// inside one poll window (the two writes coalesce into one event and the
+// gesture is missed). Still just an int compare per tick — idle CPU ~0%.
+var pollInterval: TimeInterval = 0.1
 var failNextWrite = false // deterministic integration-test hook
 var markWritesSpec: String? = nil // integration-test hook; resolved below
 var hotkeySpecs: [(id: String, spec: String)] = []

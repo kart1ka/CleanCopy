@@ -12,9 +12,11 @@ import type { CleanMode, Hotkeys } from './config';
 
 // Orchestration: spawn the Swift helper, listen for clipboard events, run
 // each through decide(), and reply with cleaned text or nothing. In manual
-// mode the decide/write step waits for the clean hotkey instead of running
-// on every copy; in both modes the revert hotkey restores the original of
-// the last cleaned copy.
+// mode a copy is cleaned only on the double-copy gesture — the same text
+// copied twice in quick succession (cmd+c copies raw, cmd+c cmd+c cleans) —
+// detected from the pasteboard alone, so it needs no hotkey, no permission,
+// and no per-terminal support. In both modes the revert hotkey restores the
+// original of the last cleaned copy.
 //
 // PRIVACY: nothing in this file may ever log, store, or transmit clipboard
 // text. The log callback receives event descriptions only (app names, line
@@ -29,9 +31,9 @@ export interface WatcherOptions {
   pasteboard?: string;
   /** Helper poll interval in seconds. */
   pollInterval?: number;
-  /** auto (default): clean every terminal copy. manual: only on the hotkey. */
+  /** auto (default): clean every terminal copy. manual: only on double-copy. */
   mode?: CleanMode;
-  /** Global hotkeys to register; the clean one only matters in manual mode. */
+  /** Global hotkeys to register (revert is the only one). */
   hotkeys?: Partial<Hotkeys>;
   /** Extra terminal bundle ids beyond the built-in list. */
   extraTerminals?: readonly string[];
@@ -41,6 +43,9 @@ export interface WatcherOptions {
   restartDelayMs?: number;
   /** Crash limit override, primarily for deterministic tests. */
   maxConsecutiveCrashes?: number;
+  /** Double-copy gesture window overrides, primarily for deterministic tests. */
+  doubleCopyMinGapMs?: number;
+  doubleCopyMaxGapMs?: number;
 }
 
 // If the helper dies it is restarted, but a helper that can't stay up for
@@ -50,6 +55,21 @@ export interface WatcherOptions {
 const RESTART_DELAY_MS = 1000;
 const RESTART_RESET_MS = 30_000;
 const MAX_CONSECUTIVE_CRASHES = 5;
+
+// The double-copy gesture: in manual mode, the same text copied twice within
+// this window means "clean it". The timestamps compared are when the helper's
+// poll REPORTED each copy, not when the keys were pressed, so both bounds are
+// quantized by the poll interval (100 ms).
+//
+// The lower bound is a safety guard, not ergonomics: clipboard utilities that
+// rewrite every copy instantly (Pure Paste stripping formatting, clipboard
+// managers) produce a copy-then-identical-copy pair a few milliseconds apart
+// — accepting those would silently turn manual mode into auto mode for their
+// users. Tool rewrites are observed ≤ ~1 poll apart; deliberate human
+// double-presses almost always ≥ 150 ms. A too-fast pair re-anchors on the
+// second copy, so a genuine press right after a tool rewrite still pairs.
+const DOUBLE_COPY_MIN_GAP_MS = 130;
+const DOUBLE_COPY_MAX_GAP_MS = 600;
 
 export interface Watcher {
   stop(): void;
@@ -62,10 +82,9 @@ export function startWatcher(options: WatcherOptions): Watcher {
   const maxConsecutiveCrashes =
     options.maxConsecutiveCrashes ?? MAX_CONSECUTIVE_CRASHES;
   const mode = options.mode ?? 'auto';
-  // The clean hotkey only exists to trigger manual cleaning; registering it
-  // in auto mode would squat a global combo for nothing.
-  const cleanHotkey = mode === 'manual' ? (options.hotkeys?.clean ?? null) : null;
   const revertHotkey = options.hotkeys?.revert ?? null;
+  const doubleCopyMinGapMs = options.doubleCopyMinGapMs ?? DOUBLE_COPY_MIN_GAP_MS;
+  const doubleCopyMaxGapMs = options.doubleCopyMaxGapMs ?? DOUBLE_COPY_MAX_GAP_MS;
 
   let child: ChildProcessWithoutNullStreams | null = null;
   let stopping = false;
@@ -76,8 +95,10 @@ export function startWatcher(options: WatcherOptions): Watcher {
   // The original of the last cleaned copy, restorable while the cleaned text
   // is still on the clipboard (guarded by changeCount). In-memory only.
   let revertible: RevertState | null = null;
-  // Manual mode: the terminal copy waiting for the clean hotkey.
-  let awaitingClean: ClipboardEvent | null = null;
+  // Manual mode: the previous terminal copy, held only to recognize the
+  // double-copy gesture (same text again = clean it). In-memory only, and
+  // replaced or cleared by whatever copy comes next.
+  let doubleCopyAnchor: { text: string; at: number } | null = null;
   // Writes in flight. The helper handles messages serially and answers each
   // write with exactly one wrote/stale/write-failed, in order — so a FIFO
   // queue is enough to know which write an ack belongs to.
@@ -118,15 +139,6 @@ export function startWatcher(options: WatcherOptions): Watcher {
   }
 
   function handleHotkey(id: string): void {
-    if (id === 'clean') {
-      if (!awaitingClean) {
-        log('clean hotkey pressed, but there is no terminal copy to clean');
-        return;
-      }
-      cleanEvent(awaitingClean);
-      awaitingClean = null;
-      return;
-    }
     if (id === 'revert') {
       if (!revertible) {
         log('revert hotkey pressed, but there is no cleaned copy to revert');
@@ -221,20 +233,37 @@ export function startWatcher(options: WatcherOptions): Watcher {
     }
     if (message.type !== 'clipboard') return;
 
-    // Any new copy supersedes what the hotkeys were about: the last clean is
-    // no longer the clipboard's content, and a stale manual candidate must
-    // not be cleanable later out from under an unrelated copy.
+    // Any new copy supersedes what came before it: the last clean is no
+    // longer the clipboard's content, and an intervening copy (any app)
+    // breaks a double-copy pair — the two halves of the gesture must be
+    // consecutive.
     revertible = null;
-    awaitingClean = null;
+    const previous = doubleCopyAnchor;
+    doubleCopyAnchor = null;
 
     if (mode === 'manual') {
       // Same privacy gate as decide(): non-terminal copies are discarded
       // before the text is examined or held in any way.
       if (!isTerminalApp(message.bundleId, extraTerminals)) return;
-      awaitingClean = message;
+      const now = Date.now();
+      if (previous && previous.text === message.text) {
+        const gap = now - previous.at;
+        if (gap >= doubleCopyMinGapMs && gap <= doubleCopyMaxGapMs) {
+          // The double-copy gesture: clean, pinned to the second copy's
+          // changeCount. The anchor stays cleared — a third identical copy
+          // starts a fresh pair instead of chaining cleans.
+          cleanEvent(message);
+          return;
+        }
+      }
+      // First copy of a potential pair — or a same-text copy outside the
+      // window (too slow: an unrelated re-copy; too fast: a clipboard tool's
+      // instant rewrite, which must not count as the gesture). Either way it
+      // becomes the new anchor, so the user's next copy is judged against it.
+      doubleCopyAnchor = { text: message.text, at: now };
       log(
         `terminal copy from ${message.appName || message.bundleId} noted` +
-          (cleanHotkey ? ` — press ${cleanHotkey} to clean it` : ''),
+          ' — copy it again to clean it',
       );
       return;
     }
@@ -245,7 +274,6 @@ export function startWatcher(options: WatcherOptions): Watcher {
     const args: string[] = [];
     if (options.pasteboard) args.push('--pasteboard', options.pasteboard);
     if (options.pollInterval) args.push('--interval', String(options.pollInterval));
-    if (cleanHotkey) args.push('--hotkey', `clean:${cleanHotkey}`);
     if (revertHotkey) args.push('--hotkey', `revert:${revertHotkey}`);
 
     lastSpawnAt = Date.now();
@@ -272,9 +300,10 @@ export function startWatcher(options: WatcherOptions): Watcher {
       rl.close();
       child = null;
       // Acks for in-flight writes died with the helper; a stale queue would
-      // misattribute every ack the next helper sends. (revertible/awaiting-
-      // Clean survive: their changeCounts are pasteboard state, not helper
-      // state, so the stale-write guard still protects them.)
+      // misattribute every ack the next helper sends. (revertible and the
+      // double-copy anchor survive: they are pasteboard state and wall-clock
+      // time, not helper state, so the stale-write guard and the gesture
+      // window still protect them.)
       pendingWrites = [];
       if (stopping) return;
       log(`helper exited unexpectedly (code=${code}, signal=${signal})`);

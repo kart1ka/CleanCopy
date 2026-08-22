@@ -178,7 +178,7 @@ export function doctor(version: string): number {
     level: warnings.length === 0 ? 'pass' : 'warning',
     label: 'config',
     detail: warnings.length === 0
-      ? `${config.mode} mode; clean ${config.hotkeys.clean ?? 'off'}; revert ${config.hotkeys.revert ?? 'off'}`
+      ? `${config.mode} mode; revert ${config.hotkeys.revert ?? 'off'}`
       : warnings.join('; '),
   });
 

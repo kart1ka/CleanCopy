@@ -7,13 +7,14 @@ All notable changes to this project will be documented here. The project uses
 
 ### Added
 
-- Automatic and hotkey-triggered cleanup of copies from supported macOS
-  terminals.
+- Automatic cleanup of copies from supported macOS terminals, or a manual
+  mode that cleans only on the double-copy gesture (copy the same text twice,
+  quickly).
 - A reversible clean operation that refuses to overwrite a newer clipboard
   item.
 - A pure TypeScript cleanup engine that preserves code, logs, tables, and other
   uncertain text.
-- Global clean and revert hotkeys with a local JSON configuration file.
+- A global revert hotkey and a local JSON configuration file.
 - A universal native helper for Apple Silicon and Intel Macs.
 - `cleancopy doctor` and `cleancopy --version` installation diagnostics.
 

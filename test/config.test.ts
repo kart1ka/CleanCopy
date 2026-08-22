@@ -71,7 +71,7 @@ describe('loadConfig / saveConfig', () => {
   it('round-trips through saveConfig', () => {
     const config = {
       mode: 'manual' as const,
-      hotkeys: { clean: 'cmd+shift+9', revert: null },
+      hotkeys: { revert: null },
     };
     saveConfig(config);
     expect(loadConfig()).toEqual({ config, warnings: [] });
@@ -90,14 +90,23 @@ describe('loadConfig / saveConfig', () => {
       writeFileSync(configFilePath(), JSON.stringify({ hotkeys: { revert: off } }));
       const { config, warnings } = loadConfig();
       expect(config.hotkeys.revert).toBeNull();
-      expect(config.hotkeys.clean).toBe(DEFAULT_CONFIG.hotkeys.clean);
       expect(warnings).toEqual([]);
     }
   });
 
   it('normalizes hotkeys found in the file', () => {
-    writeFileSync(configFilePath(), JSON.stringify({ hotkeys: { clean: 'Shift+CMD+K' } }));
-    expect(loadConfig().config.hotkeys.clean).toBe('cmd+shift+k');
+    writeFileSync(configFilePath(), JSON.stringify({ hotkeys: { revert: 'Shift+CMD+K' } }));
+    expect(loadConfig().config.hotkeys.revert).toBe('cmd+shift+k');
+  });
+
+  it('silently ignores the retired hotkeys.clean key from an old config file', () => {
+    writeFileSync(
+      configFilePath(),
+      JSON.stringify({ hotkeys: { clean: 'cmd+ctrl+c', revert: 'cmd+ctrl+j' } }),
+    );
+    const { config, warnings } = loadConfig();
+    expect(config.hotkeys).toEqual({ revert: 'cmd+ctrl+j' });
+    expect(warnings).toEqual([]);
   });
 
   it('downgrades an invalid mode to the default, with a warning', () => {
@@ -111,7 +120,6 @@ describe('loadConfig / saveConfig', () => {
     writeFileSync(configFilePath(), JSON.stringify({ hotkeys: { revert: 'z' } }));
     const { config, warnings } = loadConfig();
     expect(config.hotkeys.revert).toBeNull();
-    expect(config.hotkeys.clean).toBe(DEFAULT_CONFIG.hotkeys.clean);
     expect(warnings.some((w) => w.includes('hotkeys.revert'))).toBe(true);
   });
 

@@ -29,7 +29,7 @@ vi.mock('../src/watcher', () => ({
   loadConfig: () => ({
     config: {
       mode: 'auto',
-      hotkeys: { clean: 'cmd+ctrl+c', revert: 'cmd+ctrl+z' },
+      hotkeys: { revert: 'cmd+ctrl+z' },
     },
     warnings: mocks.configWarnings,
   }),

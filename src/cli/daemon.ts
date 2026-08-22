@@ -234,7 +234,7 @@ export function runForeground(): void {
   for (const warning of warnings) log(`config: ${warning}`);
   log(
     config.mode === 'manual'
-      ? `mode: manual — terminal copies are cleaned only on the hotkey (${config.hotkeys.clean ?? 'DISABLED'})`
+      ? 'mode: manual — a terminal copy is cleaned only when the same text is copied twice, quickly'
       : 'mode: auto — terminal copies are cleaned as they land',
   );
   if (config.hotkeys.revert) log(`revert hotkey: ${config.hotkeys.revert}`);
@@ -376,7 +376,7 @@ export function status(): void {
   const { config } = loadConfig();
   process.stdout.write(
     config.mode === 'manual'
-      ? `mode:   manual — copies are cleaned only when you press ${config.hotkeys.clean ?? '(no hotkey set!)'}\n`
+      ? 'mode:   manual — a copy is cleaned only when you copy the same text twice, quickly\n'
       : 'mode:   auto — terminal copies are cleaned as they land\n',
   );
   process.stdout.write(
