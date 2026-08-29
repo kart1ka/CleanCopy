@@ -56,9 +56,8 @@ cleancopy config mode manual
 In manual mode the gesture is a double copy: press Cmd+C twice in quick
 succession, like a double-click, with the same text selected. The first press
 copies the text raw; the second cleans it. That second copy is the entire
-trigger. There is no extra hotkey to learn
-and no macOS permission to grant, because CleanCopy detects the repeat from
-the clipboard itself. A near-instant second copy (under about 150 ms, faster
+trigger. There is no extra hotkey to learn and no macOS permission to grant,
+because CleanCopy detects the repeat from the clipboard itself. A near-instant second copy (under about 150 ms, faster
 than a person presses twice) is deliberately ignored, so clipboard utilities
 that rewrite every copy the moment it lands cannot trigger cleans you never
 asked for.
@@ -68,9 +67,9 @@ config` restarts it for you. If you edit `~/.cleancopy/config.json` by hand
 instead, run `cleancopy stop` and then `cleancopy start` so the watcher picks
 the change up.
 
-The revert hotkey works in both modes. It (default `cmd+ctrl+z`; change it
-with `cleancopy config hotkey revert <combo>`, or disable it with `off`)
-restores the original text only when the cleaned copy is still current; it
+The revert hotkey works in both modes. Its default is `cmd+ctrl+z`; change it
+with `cleancopy config hotkey revert <combo>`, or disable it with `off`. It
+restores the original text only when the cleaned copy is still current, and
 never overwrites a newer clipboard item.
 
 If the revert hotkey does nothing when pressed, another app probably owns that
