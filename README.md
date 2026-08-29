@@ -94,14 +94,19 @@ pbpaste | cleancopy clean | pbcopy
 
 Your clipboard now holds the cleaned version; paste it anywhere.
 
-To see how each block was classified without contaminating stdout:
+### Debugging
+
+`cleancopy run` starts the watcher in the foreground and prints event lines.
+To see why a copy was cleaned the way it was, save it to a file and ask for an
+explanation — the verdict for each block goes to stderr, so the cleaned text on
+stdout stays pipeable:
 
 ```bash
-cleancopy clean --explain < copied-output.txt
+pbpaste > copied.txt
+cleancopy clean --explain < copied.txt
 ```
 
-`cleancopy run` starts the watcher in the foreground and prints event lines;
-it is useful when debugging. `cleancopy --help` lists every command.
+`cleancopy --help` lists every command.
 
 ## Uninstall
 
