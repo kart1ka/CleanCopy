@@ -133,7 +133,7 @@ describe('doctor', () => {
 
     expect(doctor('test')).toBe(1);
     expect(output).toContain('!! autostart: launch agent runs');
-    expect(output).toContain('re-run `cleancopy install`');
+    expect(output).toContain('re-run `cleancopy autostart on`');
   });
 
   it('fails when launchd reports the agent failing to start', () => {

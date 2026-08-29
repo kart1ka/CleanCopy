@@ -90,9 +90,11 @@ different combo (`cleancopy config hotkey revert cmd+ctrl+shift+z`). Run
 To start CleanCopy automatically when you log in:
 
 ```bash
-cleancopy install
-cleancopy stop --disable-autostart # stop and remove login autostart later
+cleancopy autostart on
+cleancopy autostart off   # stop it and remove login autostart later
 ```
+
+`cleancopy autostart` on its own shows whether login autostart is enabled.
 
 `cleancopy run` starts the watcher in the foreground and prints event lines;
 it is useful when debugging. `cleancopy --help` lists every command.
@@ -128,8 +130,9 @@ cleancopy start
 ```
 
 For a login-started watcher, set that environment variable before running
-`cleancopy install`; the launch agent preserves it. Re-run `cleancopy install`
-after changing the variable or after switching Node installations.
+`cleancopy autostart on`; the launch agent preserves it. Re-run
+`cleancopy autostart on` after changing the variable or after switching Node
+installations.
 
 Nothing leaves your machine. Clipboard contents are never written to disk. The
 event log at `~/.cleancopy/cleancopy.log` records content-free summaries such

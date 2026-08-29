@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { findUnknownArg, nodeTooOldMessage, packageVersion, parseStopArgs } from '../src/cli';
+import {
+  findUnknownArg,
+  nodeTooOldMessage,
+  packageVersion,
+  parseAutostartArgs,
+  parseStopArgs,
+} from '../src/cli';
 
 describe('CLI metadata', () => {
   it('--version is sourced from package.json', () => {
@@ -35,5 +41,15 @@ describe('CLI metadata', () => {
     expect(parseStopArgs([])).toEqual({ disableAutostart: false });
     expect(parseStopArgs(['--disable-autostart'])).toEqual({ disableAutostart: true });
     expect(() => parseStopArgs(['--forever'])).toThrow('Unknown stop option: --forever');
+  });
+
+  it('names login autostart for what it does: on, off, or show the state', () => {
+    // `cleancopy install` read as "install what?" one line after
+    // `npm install` (F22).
+    expect(parseAutostartArgs([])).toBe('show');
+    expect(parseAutostartArgs(['on'])).toBe('on');
+    expect(parseAutostartArgs(['off'])).toBe('off');
+    expect(() => parseAutostartArgs(['enable'])).toThrow('Unknown autostart option: enable');
+    expect(() => parseAutostartArgs(['on', '--now'])).toThrow('Unknown autostart option: --now');
   });
 });

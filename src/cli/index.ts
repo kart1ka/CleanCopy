@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { cleanWithReport } from '../engine';
 import { configCommand } from './config';
-import { install, runForeground, start, status, stop } from './daemon';
+import { autostart, runForeground, start, status, stop } from './daemon';
 import { doctor, requiredNodeMajor } from './doctor';
 
 // The CLI has two faces: `clean` pipes text through the engine once (the
@@ -20,7 +20,7 @@ Usage:
                                  stop it and remove login autostart
   cleancopy status               is the watcher running?
   cleancopy doctor               check whether this installation is ready
-  cleancopy install              start automatically at login (launchd)
+  cleancopy autostart on|off     start at login (or not); bare: show state
   cleancopy run                  run the watcher in the foreground (debugging)
   cleancopy config               view or change settings (see below)
   cleancopy --version            show the installed version
@@ -59,6 +59,22 @@ export function packageVersion(): string {
     // JSON or filesystem stack trace from the simplest diagnostic command.
   }
   return 'unknown';
+}
+
+export type AutostartSetting = 'on' | 'off' | 'show';
+
+/**
+ * `autostart on` registers the login LaunchAgent, `off` removes it, and a
+ * bare `autostart` reports the current state. Named for what it does — the
+ * old `cleancopy install`, read right after `npm install`, asked "install
+ * what?" (F22).
+ */
+export function parseAutostartArgs(args: string[]): AutostartSetting {
+  const [setting, ...rest] = args;
+  if (rest.length > 0) throw new Error(`Unknown autostart option: ${rest[0]}`);
+  if (setting === undefined) return 'show';
+  if (setting === 'on' || setting === 'off') return setting;
+  throw new Error(`Unknown autostart option: ${setting} (expected on or off)`);
 }
 
 export function parseStopArgs(args: string[]): { disableAutostart: boolean } {
@@ -214,9 +230,16 @@ export async function main(): Promise<void> {
     process.exitCode = doctor(packageVersion());
     return;
   }
-  if (command === 'install') {
-    if (rejectUnknown('install', args.slice(1))) return;
-    await install();
+  if (command === 'autostart') {
+    let setting: AutostartSetting;
+    try {
+      setting = parseAutostartArgs(args.slice(1));
+    } catch (err) {
+      process.stderr.write(`${(err as Error).message}\n\n${HELP}`);
+      process.exitCode = 1;
+      return;
+    }
+    await autostart(setting);
     return;
   }
   if (command === 'config') {

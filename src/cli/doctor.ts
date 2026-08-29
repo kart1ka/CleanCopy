@@ -225,13 +225,13 @@ export function doctor(version: string): number {
       checks.push({
         level: 'fail',
         label: 'autostart',
-        detail: `launch agent runs ${program}, which no longer exists (Node was upgraded or switched?) — re-run \`cleancopy install\``,
+        detail: `launch agent runs ${program}, which no longer exists (Node was upgraded or switched?) — re-run \`cleancopy autostart on\``,
       });
     } else if (lastExit !== null && lastExit !== 0) {
       checks.push({
         level: 'fail',
         label: 'autostart',
-        detail: `launch agent is failing to start (last exit code ${lastExit}) — re-run \`cleancopy install\``,
+        detail: `launch agent is failing to start (last exit code ${lastExit}) — re-run \`cleancopy autostart on\``,
       });
     } else {
       checks.push({

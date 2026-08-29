@@ -384,17 +384,33 @@ export function status(): void {
   );
   process.stdout.write(`config: ${configFilePath()} (edit via \`cleancopy config\`)\n`);
 
-  const installed = fs.existsSync(plistPath());
-  const autostart = !installed
-    ? 'disabled (run `cleancopy install`)'
-    : isLaunchAgentLoaded()
-      ? 'enabled (starts at login)'
-      : 'installed but not loaded';
-  process.stdout.write(`autostart: ${autostart}\n`);
+  process.stdout.write(`autostart: ${autostartState()}\n`);
+}
+
+/** Describe the login-autostart state the way status and doctor do. */
+export function autostartState(): string {
+  if (!fs.existsSync(plistPath())) return 'disabled (run `cleancopy autostart on`)';
+  return isLaunchAgentLoaded() ? 'enabled (starts at login)' : 'installed but not loaded';
+}
+
+/** `cleancopy autostart on|off`, or bare to report the current state. */
+export async function autostart(setting: 'on' | 'off' | 'show'): Promise<void> {
+  if (setting === 'show') {
+    process.stdout.write(`autostart: ${autostartState()}\n`);
+    return;
+  }
+  if (setting === 'off') {
+    // Unloading the agent kills an agent-run watcher, so this is exactly
+    // `stop --disable-autostart`: honest about stopping rather than leaving a
+    // watcher that may or may not survive.
+    await stop({ disableAutostart: true });
+    return;
+  }
+  await enableAutostart();
 }
 
 /** Register the launchd LaunchAgent so the watcher starts at login. */
-export async function install(): Promise<void> {
+async function enableAutostart(): Promise<void> {
   ensureDarwin();
   resolveHelperBinary(); // fail fast with a useful message before we touch launchd
 
@@ -418,6 +434,6 @@ export async function install(): Promise<void> {
   // fails to launch — so tell the user how to repair it.
   process.stdout.write(
     `note: autostart is pinned to this Node binary:\n        ${process.execPath}\n` +
-      '      If you upgrade or switch Node (e.g. via nvm/fnm), re-run `cleancopy install`.\n',
+      '      If you upgrade or switch Node (e.g. via nvm/fnm), re-run `cleancopy autostart on`.\n',
   );
 }
