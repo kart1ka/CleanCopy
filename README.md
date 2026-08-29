@@ -34,18 +34,6 @@ cleancopy doctor
 
 ## Use it
 
-### Clean text once
-
-```bash
-pbpaste | cleancopy clean | pbcopy
-```
-
-To see how each block was classified without contaminating stdout:
-
-```bash
-cleancopy clean --explain < copied-output.txt
-```
-
 ### Clean terminal copies automatically
 
 ```bash
@@ -95,6 +83,22 @@ cleancopy autostart off   # stop it and remove login autostart later
 ```
 
 `cleancopy autostart` on its own shows whether login autostart is enabled.
+
+### Clean text once, without the watcher
+
+Copy something from a terminal, then run:
+
+```bash
+pbpaste | cleancopy clean | pbcopy
+```
+
+Your clipboard now holds the cleaned version; paste it anywhere.
+
+To see how each block was classified without contaminating stdout:
+
+```bash
+cleancopy clean --explain < copied-output.txt
+```
 
 `cleancopy run` starts the watcher in the foreground and prints event lines;
 it is useful when debugging. `cleancopy --help` lists every command.
