@@ -53,9 +53,10 @@ only when you ask, switch to `manual` mode:
 cleancopy config mode manual
 ```
 
-In manual mode the gesture is a double copy: press Cmd+C once to copy the text
-raw, and press it again, same selection, within about half a second, to clean
-it. That second copy is the entire trigger. There is no extra hotkey to learn
+In manual mode the gesture is a double copy: press Cmd+C twice in quick
+succession, like a double-click, with the same text selected. The first press
+copies the text raw; the second cleans it. That second copy is the entire
+trigger. There is no extra hotkey to learn
 and no macOS permission to grant, because CleanCopy detects the repeat from
 the clipboard itself. A near-instant second copy (under about 150 ms, faster
 than a person presses twice) is deliberately ignored, so clipboard utilities
