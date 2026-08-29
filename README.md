@@ -64,7 +64,9 @@ that rewrite every copy the moment it lands cannot trigger cleans you never
 asked for.
 
 Changed settings apply immediately: if the watcher is running, `cleancopy
-config` restarts it for you.
+config` restarts it for you. If you edit `~/.cleancopy/config.json` by hand
+instead, run `cleancopy stop` and then `cleancopy start` so the watcher picks
+the change up.
 
 The revert hotkey works in both modes. It (default `cmd+ctrl+z`; change it
 with `cleancopy config hotkey revert <combo>`, or disable it with `off`)
