@@ -43,7 +43,8 @@ cleancopy stop      # stop the background watcher
 ```
 
 With the watcher running, copies made while a supported terminal is frontmost
-are cleaned in place. Copy, then paste as usual.
+are cleaned in place. Copy, then paste as usual. If a clean ever goes wrong,
+press `cmd+ctrl+z` and the original copy is back (the revert hotkey, below).
 
 The default `auto` mode cleans eligible terminal copies as they land. To clean
 only when you ask, switch to `manual` mode:
@@ -64,10 +65,10 @@ asked for.
 Changed settings apply immediately: if the watcher is running, `cleancopy
 config` restarts it for you.
 
-The revert hotkey (default `cmd+ctrl+z`; change it with `cleancopy config
-hotkey revert <combo>`, or disable it with `off`) restores the original text
-only when the cleaned copy is still current; it never overwrites a newer
-clipboard item.
+The revert hotkey works in both modes. It (default `cmd+ctrl+z`; change it
+with `cleancopy config hotkey revert <combo>`, or disable it with `off`)
+restores the original text only when the cleaned copy is still current; it
+never overwrites a newer clipboard item.
 
 If the revert hotkey does nothing when pressed, another app probably owns that
 combo already. macOS gives the keystroke to whichever app registered it first
