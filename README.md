@@ -87,6 +87,17 @@ cleancopy autostart off   # stop it and remove login autostart later
 
 `cleancopy autostart` on its own shows whether login autostart is enabled.
 
+### Upgrade
+
+```bash
+npm install --global cleancopy
+cleancopy stop && cleancopy start
+```
+
+The running watcher keeps the old version until it restarts (at your next
+login, or with the `stop`/`start` above). Everything else — settings, the
+event log, login autostart — carries over on its own.
+
 ### Clean text once, without the watcher
 
 Copy something from a terminal, then run:
