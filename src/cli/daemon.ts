@@ -415,8 +415,13 @@ async function enableAutostart(): Promise<void> {
   resolveHelperBinary(); // fail fast with a useful message before we touch launchd
 
   // A manually-started daemon already owns the pid file; stop it so the
-  // launch-agent copy becomes the single owner instead of colliding.
-  if (runningPid() !== null) await stop();
+  // launch-agent copy becomes the single owner instead of colliding. Framed
+  // as the hand-over it is: a bare "cleancopy stopped" here read as "autostart
+  // turned my watcher off" (F28).
+  if (runningPid() !== null) {
+    process.stdout.write('handing the running watcher over to launchd…\n');
+    await stop();
+  }
 
   ensureStateDir(); // StandardOutPath's parent must exist before launchd opens it
   try {
@@ -427,7 +432,18 @@ async function enableAutostart(): Promise<void> {
     process.exit(1);
   }
 
-  process.stdout.write('cleancopy will now start automatically at login.\n');
+  // RunAtLoad means launchd starts the watcher right now, not just at the
+  // next login — wait for its pid so the end state is stated, not implied.
+  let pid: number | null = null;
+  for (let i = 0; i < 20 && pid === null; i++) {
+    await sleep(100);
+    pid = runningPid();
+  }
+  process.stdout.write(
+    pid !== null
+      ? `cleancopy is running (pid ${pid}) and will start automatically at login.\n`
+      : 'cleancopy will start automatically at login (not up yet — check `cleancopy status`).\n',
+  );
   process.stdout.write(`launch agent: ${plistPath()}\n`);
   // The plist pins an absolute Node path (launchd has a bare PATH and can't
   // resolve a version-managed `node`). If that path moves, the agent silently
