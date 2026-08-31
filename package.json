@@ -22,8 +22,10 @@
   "bin": {
     "cleancopy": "dist/cli/index.js"
   },
+  "sideEffects": false,
   "files": [
     "dist/**/*.js",
+    "dist/**/*.d.ts",
     "helper/bin"
   ],
   "engines": {
