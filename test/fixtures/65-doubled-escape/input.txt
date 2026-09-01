@@ -1,0 +1,1 @@
+[31m]the marker text survives a second clean

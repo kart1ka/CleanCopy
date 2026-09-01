@@ -25,11 +25,19 @@ const EXOTIC_SPACES = new RegExp('[\\u00A0\\u1680\\u2000-\\u200A\\u202F\\u205F\\
 // match cross one would mean a stray unterminated ESC ] silently deletes the
 // entire rest of the copy), and the remaining short escapes (ESC = keypad
 // mode, ESC 7 save cursor, …: optional intermediates then one final byte).
+// The unterminated-OSC form additionally requires an OSC-shaped payload
+// (leading digit or ';'): without that, a stray "ESC ]" manufactured by
+// stripping a doubled escape would swallow the visible rest of the line on a
+// second pass. A bare ESC that fits no form is stripped alone (last branch),
+// so stripping can never leave an ESC behind to combine with following text —
+// which is what keeps this step idempotent.
 const ANSI = new RegExp(
   '\\u001B(?:' +
     '\\[[0-9;?]*[ -\\/]*[@-~]' + // CSI
-    '|\\][^\\u0007\\u001B\\n]*(?:\\u0007|\\u001B\\\\)?' + // OSC
+    '|\\][0-9;][^\\u0007\\u001B\\n]*(?:\\u0007|\\u001B\\\\)?' + // OSC
+    '|\\][^\\u0007\\u001B\\n]*(?:\\u0007|\\u001B\\\\)' + // OSC, terminated
     '|[ -\\/]*[0-~]' + // short escape sequences
+    '|' + // bare ESC that fits no sequence
     ')',
   'g',
 );
