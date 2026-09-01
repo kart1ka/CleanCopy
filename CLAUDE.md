@@ -41,7 +41,7 @@ Distribution stays `npm install -g cleancopy`; the prebuilt Swift helper ships i
 
 ### The cleanup engine — the heart (`src/engine`)
 
-Pure functions: text in, text out, **no side effects and no macOS/clipboard code**. Keeping the engine isolated makes it safe and easy to test, but it is an internal part of the CLI rather than a published library API. The pipeline (one file per step):
+Pure functions: text in, text out, **no side effects and no macOS/clipboard code**. Keeping the engine isolated makes it safe and easy to test, but it is an internal part of the CLI rather than a published library API — deliberately: an `exports` map for the engine was drafted and dropped in review (semver-bound surface with one consumer). The package does ship `dist/**/*.d.ts`, and the private marketing-site repo exact-pins the package and deep-imports `cleancopy/dist/engine/index.js` (explicit file path — directory imports fail under ESM) as an internal, promised-to-no-one path with full types. If outsiders ever depend on internals, the answer is an `./internal/engine` map with a stability disclaimer, not more hidden paths. The pipeline (one file per step):
 
 1. **normalize** (`normalize.ts`) — always-safe tidy-ups applied to every copy, no judgement: unify line endings, strip ANSI codes, remove zero-width characters, convert exotic Unicode spaces to plain spaces, trim trailing whitespace, and *strip the common left margin* (the indentation shared by all lines — the terminal/Claude render margin). Stripping the *shared* margin is safe even for code: the block slides left, its inner shape intact.
 2. **segment** (`segment.ts`) — split into blocks at blank lines. Critical because one copy is often mixed (prose, then code, then prose); each block is judged on its own.
