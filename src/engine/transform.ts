@@ -36,6 +36,9 @@ export function shouldReflow(c: Classification): boolean {
 //     from a split pane or a narrow terminal still reflows.
 const WRAP_MIN = 32;
 const NEAR_MAX = 15;
+// Columns a break may fall short of the demonstrated width before the
+// forced-break veto calls it deliberate; absorbs marker/indent width skew.
+const WRAP_SLACK = 6;
 // A line ending in one of these is a lead-in (a label or clause introducing
 // what follows, e.g. "Steps:"), so the break after it is deliberate even when
 // the line runs to the block's edge — never join across it. Sentence-ending
@@ -148,6 +151,7 @@ function reflowParagraph(lines: string[], ctx: TransformContext = {}): string {
   if (trimmed.length === 1) return trimmed[0];
 
   const width = trimmed.reduce((m, l) => Math.max(m, l.length), 0);
+  const rawMax = demonstratedWidth(lines.map((l) => l.length));
   // A block whose widest line is under WRAP_MIN cannot be width-wrapped prose —
   // no real window is that narrow, so every break in it is the author's
   // (`git branch` output, short assignments, one-command-per-line notes).
@@ -164,7 +168,13 @@ function reflowParagraph(lines: string[], ctx: TransformContext = {}): string {
   for (let i = 1; i < trimmed.length; i++) {
     const prev = trimmed[i - 1];
     const next = trimmed[i];
-    const verdict = judgeBreak(prev, next, establishedWidth, ctx.docWidth);
+    // The veto judges the line as accumulated so far (out's tail), not the
+    // original fragment: joins lengthen prev, and judging both passes against
+    // the same geometry is what keeps clean() idempotent.
+    const verdict = judgeBreak(
+      prev, next, establishedWidth, ctx.docWidth, rawMax,
+      out[out.length - 1].length, trimmed.length === 2,
+    );
     ctx.joins?.push({ line: i - 1, ...verdict });
     if (verdict.joined) {
       out[out.length - 1] += ' ' + next; // soft wrap — glue the trimmed text
@@ -186,6 +196,9 @@ function judgeBreak(
   next: string,
   width: number | undefined,
   docWidth?: number,
+  rawWidth = 0,
+  prevRawLen = 0,
+  pairBlock = false,
 ): Omit<JoinReport, 'line'> {
   // Hard vetoes — breaks that are deliberate by construction, whatever the
   // evidence on either side says.
@@ -193,6 +206,41 @@ function judgeBreak(
   if (HEADING.test(prev)) return { joined: false, score: 0, signals: ['veto:heading-above'] };
   if (HEADING.test(next)) return { joined: false, score: 0, signals: ['veto:heading-below'] };
   if (LIST_ITEM.test(next)) return { joined: false, score: 0, signals: ['veto:list-item'] };
+
+  // Forced-break veto (F21): a wrap only ever breaks a line because the next
+  // word didn't fit, so when that word clearly WOULD have fit (with slack for
+  // list-marker/indent skew) within the widest width the copy demonstrates,
+  // the break was deliberate — command output like "cleancopy started (pid …)"
+  // must not be welded to the longer line after it, however prose-like the
+  // grammar reads. Exemption: a prev left syntactically open (unclosed
+  // bracket, dangling word) is a torn wrap fragment, never a finished output
+  // line, and keeps its grammar-based join (fixtures 20/21); so is a
+  // trailing comma, which finished output lines don't end on. Judged against
+  // the block's own width only — docWidth shifts between passes as joins
+  // change which blocks vouch for it, while a block's max only grows, which
+  // keeps the veto stable and clean() idempotent.
+  // Labelled tool output emits every line through the same printer
+  // ("npm notice …", "remote: …"), so two adjacent lines sharing a literal
+  // prefix with a completed word were printed, not wrapped — wrap points land
+  // wherever the window says, never twice on the same words. Judged pairwise
+  // so the false-positive cost is one kept break, not a frozen block.
+  let shared = 0;
+  while (shared < prev.length && shared < next.length && prev[shared] === next[shared]) shared++;
+  if (shared >= 6 && /\S /.test(prev.slice(0, shared))) {
+    return { joined: false, score: 0, signals: ['veto:shared-prefix'] };
+  }
+
+  const fitWidth = rawWidth;
+  const firstWord = next.split(/\s+/, 1)[0] ?? '';
+  const syntacticallyOpen =
+    hasUnclosedOpener(prev) || DANGLING_WORD.test(prev) || /,$/.test(prev);
+  if (
+    !syntacticallyOpen &&
+    firstWord.length > 0 &&
+    prevRawLen + 1 + firstWord.length <= fitWidth - WRAP_SLACK
+  ) {
+    return { joined: false, score: 0, signals: ['veto:break-not-forced'] };
+  }
 
   const atRightEdge =
     width !== undefined && prev.length >= WRAP_MIN && prev.length >= width - NEAR_MAX;
@@ -226,11 +274,36 @@ function judgeBreak(
   // Counter-evidence: a finished sentence followed by a fresh capitalized one
   // reads as two deliberate lines — but only when prev stopped short of the
   // edge, where the author had room to continue and chose not to.
-  if (!atRightEdge && SENTENCE_END.test(prev) && STARTS_UPPER.test(next)) {
+  // atRightEdge normally silences this (a sentence ending AT the column is a
+  // coincidental wrap) — except in a two-line block whose first line is the
+  // longer one: there the "edge" is defined by that line itself, and trusting
+  // the self-evidence is how a pair of joined sentences welds into one on a
+  // re-clean. Larger blocks establish their edge from other lines, so the
+  // coincidental-wrap reading stays.
+  const selfEvident = pairBlock && width !== undefined && prev.length >= width;
+  if ((!atRightEdge || selfEvident) && SENTENCE_END.test(prev) && STARTS_UPPER.test(next)) {
     add(-1, 'sentence-end');
   }
 
   return { joined: score >= JOIN_SCORE, score, signals };
+}
+
+/**
+ * The block's demonstrated wrap width for the forced-break veto, from raw
+ * (indent-included) line lengths: window fit is about columns. Normally the
+ * longest line — but a lone outlier (a Ghostty-rejoined soft wrap, a pasted
+ * URL) is not the window edge when the remaining lines hug a real wrap edge
+ * of their own; then that edge is the width. A two-line block can never
+ * demote its max this way (one leftover line establishes nothing), which is
+ * what keeps short command output protected.
+ */
+function demonstratedWidth(rawLens: number[]): number {
+  const max = rawLens.reduce((m, n) => Math.max(m, n), 0);
+  if (rawLens.filter((n) => n >= max - NEAR_MAX).length >= 2) return max;
+  const rest = rawLens.filter((n) => n < max - NEAR_MAX);
+  const second = rest.reduce((m, n) => Math.max(m, n), 0);
+  const hugging = rest.filter((n) => n >= second - NEAR_MAX).length;
+  return second >= WRAP_MIN && hugging >= MIN_HUGGING_LINES ? second : max;
 }
 
 /** Whether the line opens a bracket ("(", "[", "{") it never closes. */
@@ -260,6 +333,7 @@ function reflowList(lines: string[], ctx: TransformContext = {}): string {
     ? lines
     : stripCommonMargin(lines.join('\n')).split('\n');
   const width = block.reduce((m, l) => Math.max(m, l.trim().length), 0);
+  const rawMax = demonstratedWidth(block.map((l) => l.length));
   // Same narrow-block gate as reflowParagraph: items this short were never
   // wrapped, so there is nothing to rejoin and no space run worth collapsing.
   if (width < WRAP_MIN) return block.join('\n');
@@ -275,7 +349,10 @@ function reflowList(lines: string[], ctx: TransformContext = {}): string {
     }
     const prev = block[i - 1].trim();
     const next = line.trim();
-    const verdict = judgeBreak(prev, next, establishedWidth, ctx.docWidth);
+    const verdict = judgeBreak(
+      prev, next, establishedWidth, ctx.docWidth, rawMax,
+      out[out.length - 1].length, block.length === 2,
+    );
     ctx.joins?.push({ line: i - 1, ...verdict });
     if (verdict.joined) {
       out[out.length - 1] += ' ' + next; // wrapped continuation

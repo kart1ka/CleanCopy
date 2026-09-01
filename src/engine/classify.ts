@@ -73,6 +73,40 @@ const SHELL_COMMAND = new RegExp(
     ')(?:\\s|$)',
 );
 
+// The prompt a shell prints before every command — `user@host dir %` (zsh),
+// `user@host:~/path$` (bash) — anchored to line start. The zsh branch demands
+// whitespace before the symbol so "noreply@acme.com 30% of the time" (a word
+// merely ENDING in %) cannot match; the bash branch demands the colon path;
+// the host may not contain ":" so an scp/git target ("git@host:path # …")
+// cannot. The doc-convention `$ ` stays block-level only (`looksLikeCode`).
+export const SHELL_PROMPT_LINE =
+  /^\s*\S+@[^\s:]+(?::\S*[$#]|(?:\s+(?!\d+\s)\S+)?\s+[%$#])(?:\s|$)/;
+
+// Cheap pre-checks before the regex: prompts are short and always carry an
+// '@', while a pathological long line ('@'-dense mail dumps) can make the
+// backtracking quadratic.
+export function isShellPromptLine(line: string): boolean {
+  return line.length <= 400 && line.includes('@') && SHELL_PROMPT_LINE.test(line);
+}
+
+// Two prompts, not one: a real session capture virtually always carries at
+// least the command's prompt and the trailing one, while wrapped prose that
+// merely QUOTES a prompt ("the prompt will look like\nalice@web-prod-1 ~ %")
+// lands exactly one — and must not freeze unrelated paragraphs. A lone
+// prompt line still freezes its own block (the guard in classify below).
+export function looksLikeTranscript(lines: string[]): boolean {
+  return lines.filter(isShellPromptLine).length >= 2;
+}
+
+/**
+ * A verbatim classification decided above the block level (the transcript and
+ * block-comment fences in clean()), where the evidence lives outside the block
+ * being classified.
+ */
+export function forcedVerbatim(type: Classification['type'], signal: string): Classification {
+  return verbatim(type, [signal]);
+}
+
 export function classify(block: Block): Classification {
   const { lines, text } = block;
   const signals: string[] = [];
@@ -99,6 +133,9 @@ export function classify(block: Block): Classification {
   }
   if (looksLikeShellCommands(lines)) {
     return verbatim('code', [...signals, 'shell-command-sequence']);
+  }
+  if (lines.some(isShellPromptLine)) {
+    return verbatim('code', [...signals, 'shell-prompt-line']);
   }
   if (looksLikeLineComments(lines)) {
     return verbatim('code', [...signals, 'line-comment-block']);

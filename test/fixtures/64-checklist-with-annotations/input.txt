@@ -1,0 +1,9 @@
+- [x] The first check passed on the second try after the cache was cleared
+      and the build server restarted with a clean state directory in place.
+      (verified on staging.)
+- [x] The second check needed the longer timeout because the upload of the
+      bundle to the mirror ran slowly over the office connection that day.
+      (verified on staging.)
+- [x] The third check was skipped because the hardware token for the signing
+      step was in the other office and nobody could unlock the drawer.
+      (still open.)

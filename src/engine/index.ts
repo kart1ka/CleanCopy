@@ -1,6 +1,6 @@
 import { normalize, stripRenderMargin } from './normalize';
 import { segment } from './segment';
-import { classify } from './classify';
+import { classify, forcedVerbatim, looksLikeTranscript } from './classify';
 import { transform, inferWrapWidth, shouldReflow } from './transform';
 import type { BlockReport, CleanOptions, CleanResult, JoinReport } from './types';
 
@@ -28,8 +28,26 @@ export function clean(input: string): string {
   return cleanWithReport(input).text;
 }
 
-/** Like {@link clean}, but also returns the per-block classifications. */
+/**
+ * Like {@link clean}, but also returns the per-block classifications.
+ *
+ * Stability gate: the pipeline runs once more on its own output, and if that
+ * second pass would change anything the text has manufactured a new wrap
+ * geometry out of its own joins — self-detected ambiguity. The golden rule
+ * answers ambiguity with inaction, so the copy is returned normalize-only,
+ * which also makes clean() idempotent by construction rather than by hope.
+ */
 export function cleanWithReport(input: string, options: CleanOptions = {}): CleanResult {
+  const first = runPipeline(input, options);
+  if (runPipeline(first.text, {}).text === first.text) return first;
+  return runPipeline(input, options, true);
+}
+
+function runPipeline(
+  input: string,
+  options: CleanOptions,
+  forceVerbatim = false,
+): CleanResult {
   const normalized = normalize(input);
   // The trailing-newline contract lives here, not in each caller: the output
   // ends with a single newline exactly when the input did, so cleaning never
@@ -37,7 +55,49 @@ export function cleanWithReport(input: string, options: CleanOptions = {}): Clea
   // bytes for the same text.
   const endsWithNewline = normalized.endsWith('\n');
   const blocks = segment(normalized);
-  const classifications = blocks.map((block) => classify(block));
+
+  // Copy-level fences, judged before per-block classification because their
+  // evidence spans blocks: a shell prompt line anywhere makes the whole copy
+  // a terminal transcript (all output, no prose to rescue — F21), and a
+  // line-start `/*` freezes everything through the closing `*/` even across
+  // blank lines, since a bare block comment's interior reads like prose (F20).
+  const transcript = looksLikeTranscript(normalized.split('\n'));
+  // An opener with no closing `*/` anywhere below is a torn or quoted `/*`:
+  // it freezes its own block only, never the whole rest of the copy.
+  let lastCloser = -1;
+  let ordinal = 0;
+  for (const b of blocks) {
+    for (const l of b.lines) {
+      if (l.includes('*/')) lastCloser = ordinal;
+      ordinal++;
+    }
+  }
+  ordinal = 0;
+  let inBlockComment = false;
+  const inCommentFence = blocks.map((block) => {
+    let touched = false;
+    for (const line of block.lines) {
+      if (inBlockComment) {
+        touched = true;
+        if (line.includes('*/')) inBlockComment = false;
+      } else if (/^\s*\/\*(?=$|[\s*!])/.test(line)) {
+        // lookahead: a real opener is `/*` then space/`*`/`!`/EOL — never an
+        // alphanumeric, which would be a glob like `/*.log` starting a line
+        touched = true;
+        inBlockComment =
+          !line.slice(line.indexOf('/*') + 2).includes('*/') && lastCloser > ordinal;
+      }
+      ordinal++;
+    }
+    return touched;
+  });
+
+  const classifications = blocks.map((block, i) => {
+    if (forceVerbatim) return forcedVerbatim('other', 'unstable-clean');
+    if (transcript) return forcedVerbatim('other', 'terminal-transcript');
+    if (inCommentFence[i]) return forcedVerbatim('code', 'block-comment-fence');
+    return classify(block);
+  });
 
   // The wrap column is a property of the whole paste — every wrapped block in
   // one copy hugs the same right edge — so it is inferred once and handed to

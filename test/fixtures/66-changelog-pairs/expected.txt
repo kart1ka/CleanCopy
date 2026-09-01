@@ -1,0 +1,2 @@
+Fixed the importer crash when the manifest is empty and the queue is already drained.
+Added a revert hotkey that restores the original clipboard contents after a clean.

@@ -1,0 +1,2 @@
+The cleanup engine reads the copied text and decides which
+parts are safe to tidy.

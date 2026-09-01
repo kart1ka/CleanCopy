@@ -1,0 +1,5 @@
+npm notice filename: cleancopy-1.0.0.tgz
+npm notice package size: 119.8 kB
+npm notice unpacked size: 462.5 kB
+npm notice shasum: 121ebec4e85447385df8fea4307ea9e3a20adf7d
+npm notice total files: 22

@@ -1,0 +1,7 @@
+/*
+Retry the request three times before
+giving up on the network entirely.
+
+Timeouts double between attempts so a
+struggling server is not hammered.
+*/
