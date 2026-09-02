@@ -1,1 +1,1 @@
-Als kleine Entschuldigung erhalten Sie ueber service@laden-berlin.de 20 % Rabatt auf Ihre naechste Bestellung, ganz ohne Mindestbestellwert oder Gutscheincode.
+Als kleine Entschuldigung erhalten Sie ueber service@laden.example 20 % Rabatt auf Ihre naechste Bestellung, ganz ohne Mindestbestellwert oder Gutscheincode.
