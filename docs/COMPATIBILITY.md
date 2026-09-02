@@ -23,10 +23,10 @@ Version 1.0 supports these commands:
 
 - `clean [--explain]`
 - `start`, `stop [--disable-autostart]`, `status`, and `doctor`
-- `install` for enabling login autostart
+- `autostart [on|off]` for login autostart (bare `autostart` shows the state)
 - `run` for foreground diagnostics
 - `config mode auto|manual`
-- `config hotkey clean|revert <combo>|off`
+- `config hotkey revert <combo>|off`
 - `--help` and `--version`
 
 `stop` stops the watcher for the current session. With
@@ -48,14 +48,16 @@ The 1.0 configuration shape is:
 {
   "mode": "auto",
   "hotkeys": {
-    "clean": "cmd+ctrl+c",
     "revert": "cmd+ctrl+z"
   }
 }
 ```
 
-Invalid fields fall back safely and produce warnings. Config changes require a
-watcher restart.
+Invalid fields fall back safely and produce warnings. The `config` command
+restarts a running watcher itself; a hand edit to `config.json` applies at the
+next `stop`/`start`. There is no clean hotkey: manual mode's trigger is the
+double-copy gesture (copy the same text twice, quickly), and `revert` is the
+only hotkey.
 
 ## Behavior and privacy promises
 
