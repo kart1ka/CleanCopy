@@ -57,10 +57,12 @@ In manual mode the gesture is a double copy: press Cmd+C twice in quick
 succession, like a double-click, with the same text selected. The first press
 copies the text raw; the second cleans it. That second copy is the entire
 trigger. There is no extra hotkey to learn and no macOS permission to grant,
-because CleanCopy detects the repeat from the clipboard itself. A near-instant second copy (under about 150 ms, faster
-than a person presses twice) is deliberately ignored, so clipboard utilities
-that rewrite every copy the moment it lands cannot trigger cleans you never
-asked for.
+because CleanCopy detects the repeat from the clipboard itself. A near-instant
+second copy (under about 130 ms, faster than a person presses twice) is
+deliberately ignored, so clipboard utilities that rewrite every copy the moment
+it lands cannot trigger cleans you never asked for. A second copy slower than
+about 600 ms counts as a fresh copy, not a gesture — if nothing happened, press
+twice a little faster.
 
 Changed settings apply immediately: if the watcher is running, `cleancopy
 config` restarts it for you. If you edit `~/.cleancopy/config.json` by hand
