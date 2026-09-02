@@ -5,5 +5,3 @@ helper/bin/
 *.log
 .DS_Store
 *.tgz
-site/
-PRELAUNCH-TESTING.md
