@@ -1,4 +1,4 @@
-kartik@Kartiks-MacBook-Air CleanCopy % git status
+jordan@Jordans-MacBook-Air CleanCopy % git status
 On branch main
 Your branch is ahead of 'origin/main' by 9 commits.
   (use "git push" to publish your local commits)
@@ -9,4 +9,4 @@ Untracked files:
         cleancopy-1.0.0.tgz
 
 nothing added to commit but untracked files present (use "git add" to track)
-kartik@Kartiks-MacBook-Air CleanCopy %
+jordan@Jordans-MacBook-Air CleanCopy %

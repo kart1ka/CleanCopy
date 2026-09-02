@@ -1,2 +1,2 @@
 cleancopy started (pid 40043)
-events are logged to /Users/kartik/.cleancopy/cleancopy.log (never clipboard contents)
+events are logged to /Users/jordan/.cleancopy/cleancopy.log (never clipboard contents)

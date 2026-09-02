@@ -1,1 +1,1 @@
-Send the crash report and the log file straight to kartik@example.com and mention which macOS version the machine was running when the clipboard watcher died.
+Send the crash report and the log file straight to jordan@example.com and mention which macOS version the machine was running when the clipboard watcher died.
