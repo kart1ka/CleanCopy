@@ -4,3 +4,4 @@ helper/.build/
 helper/bin/
 *.log
 .DS_Store
+*.tgz
