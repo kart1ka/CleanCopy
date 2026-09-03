@@ -38,7 +38,7 @@ jobs:
         run: |
           npm pack --pack-destination "$RUNNER_TEMP"
           npm install --ignore-scripts --prefix "$RUNNER_TEMP/cleancopy-smoke" "$RUNNER_TEMP"/*.tgz
-          CLI="$RUNNER_TEMP/cleancopy-smoke/node_modules/cleancopy/dist/cli/index.js"
+          CLI="$RUNNER_TEMP/cleancopy-smoke/node_modules/cleancopy-cli/dist/cli/index.js"
           node "$CLI" --help
           test "$(node "$CLI" --version)" = "$(node -p "require('./package.json').version")"
           CLEANCOPY_STATE_DIR="$RUNNER_TEMP/cleancopy-state" node "$CLI" doctor

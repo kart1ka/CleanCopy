@@ -27,8 +27,8 @@ path.
 
 ## 3. Verify
 
-- `npm view cleancopy version` shows the new version.
-- On a real machine: `npm install --global cleancopy`, then
+- `npm view cleancopy-cli version` shows the new version.
+- On a real machine: `npm install --global cleancopy-cli`, then
   `cleancopy doctor`, then one copy → paste round trip with the watcher on.
 
 ## If a release is bad
@@ -37,7 +37,7 @@ Fix forward. Never `npm unpublish` a version people may have installed —
 publish a patch release instead, and mark the bad version:
 
 ```bash
-npm deprecate cleancopy@X.Y.Z "broken: <reason> — upgrade to X.Y.Z+1"
+npm deprecate cleancopy-cli@X.Y.Z "broken: <reason> — upgrade to X.Y.Z+1"
 ```
 
 For a hotfix on an older line: branch from the tag, apply the fix, bump the

@@ -21,7 +21,7 @@ on other operating systems rather than installing a command that cannot work.
 ## Install
 
 ```bash
-npm install --global cleancopy
+npm install --global cleancopy-cli
 ```
 
 Confirm the installed version and check that the native helper, configuration,
@@ -92,7 +92,7 @@ cleancopy autostart off   # stop it and remove login autostart later
 ### Upgrade
 
 ```bash
-npm install --global cleancopy
+npm install --global cleancopy-cli
 cleancopy stop && cleancopy start
 ```
 
@@ -130,7 +130,7 @@ Remove the background process, login autostart, and global npm package:
 
 ```bash
 cleancopy stop --disable-autostart
-npm uninstall --global cleancopy
+npm uninstall --global cleancopy-cli
 ```
 
 Plain `cleancopy stop` stops the current watcher but keeps login autostart, so

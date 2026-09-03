@@ -1,5 +1,5 @@
 {
-  "name": "cleancopy",
+  "name": "cleancopy-cli",
   "version": "1.0.0",
   "description": "Cleans up text copied from the terminal so it pastes neatly into other apps.",
   "license": "MIT",
