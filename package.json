@@ -1,6 +1,6 @@
 {
   "name": "cleancopy-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Cleans up text copied from the terminal so it pastes neatly into other apps.",
   "license": "MIT",
   "repository": {
@@ -10,7 +10,7 @@
   "bugs": {
     "url": "https://github.com/kart1ka/CleanCopy/issues"
   },
-  "homepage": "https://github.com/kart1ka/CleanCopy#readme",
+  "homepage": "https://cleancopy.dev",
   "keywords": [
     "clipboard",
     "terminal",
