@@ -28,7 +28,13 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: node -e "const p=require('./package.json'); if ('v'+p.version !== process.env.RELEASE_TAG) { throw new Error('release tag and package version differ') }"
       - run: npm ci
+      # Trusted publishing: npm exchanges this job's GitHub OIDC token
+      # (`id-token: write` above) for a short-lived publish credential, so no
+      # NPM_TOKEN secret is involved. A stored token no longer works here —
+      # npm now demands a one-time password for token publishes (EOTP), which
+      # a CI job cannot supply. The exchange needs npm >= 11.5.1 and the
+      # trusted publisher configured on npmjs.com (see RELEASING.md).
+      - name: Check npm supports trusted publishing
+        run: node -e "const [a,b,c]=require('child_process').execSync('npm --version').toString().trim().split('.').map(Number); if (a<11 || (a===11 && (b<5 || (b===5 && c<1)))) { throw new Error('npm >= 11.5.1 required for trusted publishing, have '+[a,b,c].join('.')) }"
       - name: Publish immutable package
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public --provenance --tag latest

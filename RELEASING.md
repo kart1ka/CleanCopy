@@ -7,6 +7,26 @@ so a stray local `npm publish` cannot get anywhere; `npm run release:check`
 remains the local dry-run)
 path.
 
+## 0. One-time setup: trusted publishing on npm
+
+The workflow authenticates with npm through GitHub OIDC (trusted publishing),
+not a stored token. npm rejects token publishes from CI with `EOTP` (it wants
+a one-time password), which is why every release run before this setup
+failed and 1.0.0/1.0.1 were published by hand. Configure it once per package:
+
+1. Sign in at npmjs.com and open the `cleancopy-cli` package → Settings →
+   Trusted Publisher → GitHub Actions.
+2. Enter exactly: organization or user `kart1ka`, repository `CleanCopy`,
+   workflow filename `publish.yml`, environment name `npm`. All four must
+   match the workflow or npm returns `ENEEDAUTH` at publish time.
+3. Under Publishing access, choose "Require two-factor authentication and
+   disallow tokens" so a leaked token can never publish.
+4. Delete the `NPM_TOKEN` repository secret on GitHub; nothing reads it now.
+
+Provenance is generated automatically under trusted publishing; the explicit
+`--provenance` flag stays so a misconfiguration fails loudly instead of
+publishing an unattested tarball.
+
 ## 1. Preflight
 
 - CHANGELOG.md: set the release date on the version being shipped.
