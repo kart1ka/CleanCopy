@@ -13,7 +13,7 @@ both Apple Silicon and Intel Macs, plus a pure TypeScript cleanup engine.
 ## Requirements
 
 - macOS 12 (Monterey) or later
-- Node.js 22 or later
+- Node.js 18 or later
 
 The automatic clipboard watcher is macOS-only. The package refuses installation
 on other operating systems rather than installing a command that cannot work.
@@ -188,7 +188,9 @@ The golden rule is simple: when unsure, CleanCopy leaves a block unchanged.
 
 ## Development
 
-Developing, testing, and using the published CLI requires Node.js 22 or later.
+The published CLI runs on Node.js 18 or later. Developing and testing it
+requires Node.js 20 or later, because the test runner (Vitest 4) does not
+support Node 18.
 
 ```bash
 npm install

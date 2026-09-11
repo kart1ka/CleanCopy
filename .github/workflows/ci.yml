@@ -44,3 +44,31 @@ jobs:
           CLEANCOPY_STATE_DIR="$RUNNER_TEMP/cleancopy-state" node "$CLI" doctor
           node "$CLI" clean < test/fixtures/01-wrapped-paragraph/input.txt > "$RUNNER_TEMP/cleaned.txt"
           diff -u test/fixtures/01-wrapped-paragraph/expected.txt "$RUNNER_TEMP/cleaned.txt"
+
+  # The runtime floor is Node 18 but the test runner (Vitest 4) needs 20+, so
+  # this leg proves the *built* CLI on 18 without Vitest: compile, then push
+  # every fixture through `cleancopy clean` and diff against expected.txt.
+  # Raise the runtime floor in package.json's engines and this stays honest;
+  # drop this job and Node 18 support becomes a promise nobody checks.
+  runtime-floor:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 18
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - name: Run the fixture corpus through the built CLI
+        run: |
+          CLI=dist/cli/index.js
+          node "$CLI" --help > /dev/null
+          test "$(node "$CLI" --version)" = "$(node -p "require('./package.json').version")"
+          for dir in test/fixtures/*/; do
+            node "$CLI" clean < "$dir/input.txt" > "$RUNNER_TEMP/cleaned.txt"
+            diff -u "$dir/expected.txt" "$RUNNER_TEMP/cleaned.txt"
+          done
+          CLEANCOPY_STATE_DIR="$RUNNER_TEMP/cleancopy-state" node "$CLI" doctor || true

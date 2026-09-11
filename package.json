@@ -29,7 +29,7 @@
     "helper/bin"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=18"
   },
   "os": [
     "darwin"

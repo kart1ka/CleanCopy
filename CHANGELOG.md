@@ -3,6 +3,13 @@
 All notable changes to this project will be documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- The published CLI now runs on Node.js 18 or later (previously 22 or later).
+  Developing and testing the package still requires Node.js 20 or later.
+
 ## [1.0.1] - 2026-09-06
 
 ### Changed

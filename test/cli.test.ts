@@ -20,11 +20,11 @@ describe('CLI metadata', () => {
   it('names the Node floor instead of dying on a missing modern global', () => {
     // Under Node 16 the first thing reached used to be structuredClone
     // inside config loading, so the version complaint never printed.
-    expect(nodeTooOldMessage('16.20.2', 22)).toContain('requires Node.js 22 or later');
-    expect(nodeTooOldMessage('16.20.2', 22)).toContain('v16.20.2');
-    expect(nodeTooOldMessage('20.18.1', 22)).not.toBeNull();
-    expect(nodeTooOldMessage('22.11.0', 22)).toBeNull();
-    expect(nodeTooOldMessage('23.3.0', 22)).toBeNull();
+    expect(nodeTooOldMessage('16.20.2', 18)).toContain('requires Node.js 18 or later');
+    expect(nodeTooOldMessage('16.20.2', 18)).toContain('v16.20.2');
+    expect(nodeTooOldMessage('17.9.1', 18)).not.toBeNull();
+    expect(nodeTooOldMessage('18.0.0', 18)).toBeNull();
+    expect(nodeTooOldMessage('22.11.0', 18)).toBeNull();
   });
 
   it('rejects arguments a subcommand does not recognize', () => {

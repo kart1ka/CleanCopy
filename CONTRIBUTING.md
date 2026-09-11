@@ -18,7 +18,8 @@ reproduce the behavior.
 
 ## Development setup
 
-Development requires Node.js 22 or later. Building the native helper requires
+Development requires Node.js 20 or later (the published CLI itself runs on 18
+or later; the test runner is what needs 20). Building the native helper requires
 Xcode command-line tools.
 
 ```bash

@@ -10,7 +10,7 @@ Versioning.
 | --- | --- |
 | Operating system | macOS 12 Monterey or later |
 | Mac architecture | Apple Silicon (`arm64`) and Intel (`x86_64`) |
-| Node.js | 22 or later |
+| Node.js | 18 or later |
 | npm package | Public, unscoped package published on the `latest` tag |
 | Installation | Global npm install of the CLI |
 

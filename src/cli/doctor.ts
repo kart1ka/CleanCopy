@@ -107,7 +107,7 @@ export function requiredNodeMajor(): number {
   } catch {
     // Fall through to the baked-in floor.
   }
-  return 22;
+  return 18;
 }
 
 /**
