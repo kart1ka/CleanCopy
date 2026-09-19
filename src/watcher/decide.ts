@@ -1,4 +1,4 @@
-import { clean } from '../engine';
+import { clean, type RuleOverrides } from '../engine';
 import { isTerminalApp } from './terminals';
 import type { ClipboardEvent } from './protocol';
 
@@ -29,11 +29,11 @@ export type Decision =
 
 export function decide(
   event: Pick<ClipboardEvent, 'bundleId' | 'text'>,
-  extraTerminals: readonly string[] = [],
+  options: { extraTerminals?: readonly string[]; rules?: RuleOverrides } = {},
 ): Decision {
   // Privacy gate first: copies from non-terminal apps are discarded before
   // the text is examined in any way.
-  if (!isTerminalApp(event.bundleId, extraTerminals)) {
+  if (!isTerminalApp(event.bundleId, options.extraTerminals ?? [])) {
     return { action: 'ignore', reason: 'not-terminal' };
   }
   if (event.text.trim() === '') return { action: 'ignore', reason: 'empty' };
@@ -41,7 +41,7 @@ export function decide(
 
   // clean() preserves the input's trailing-newline state, so the only
   // difference we ever write back is a real cleanup, not newline churn.
-  const output = clean(event.text);
+  const output = clean(event.text, { rules: options.rules });
   if (output === event.text) return { action: 'ignore', reason: 'already-clean' };
 
   const before = countLines(event.text);
@@ -50,5 +50,5 @@ export function decide(
 }
 
 function countLines(text: string): number {
-  return text.replace(/\n+$/, '').split('\n').length;
+  return text.replace(/(?:\r\n|\r|\n)+$/, '').split(/\r\n|\r|\n/).length;
 }

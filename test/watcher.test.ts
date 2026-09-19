@@ -103,7 +103,7 @@ describe('decide — the watcher policy', () => {
   it('honours extra terminal bundle ids', () => {
     const event = { bundleId: 'com.example.myterm', text: wrappedProse };
     expect(decide(event).action).toBe('ignore');
-    expect(decide(event, ['com.example.myterm']).action).toBe('write');
+    expect(decide(event, { extraTerminals: ['com.example.myterm'] }).action).toBe('write');
   });
 });
 

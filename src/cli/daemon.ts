@@ -244,6 +244,7 @@ export function runForeground(): void {
     log,
     pasteboard: process.env.CLEANCOPY_PASTEBOARD || undefined,
     mode: config.mode,
+    rules: config.rules,
     hotkeys: config.hotkeys,
     onFatal: () => shutdown(1),
   });

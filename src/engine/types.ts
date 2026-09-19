@@ -1,3 +1,5 @@
+import type { RuleOverrides, Rules } from './rules';
+
 // Shared types for the cleanup engine.
 //
 // The engine is pure: text in, text out. Nothing here knows about clipboards,
@@ -30,9 +32,15 @@ export interface Block {
   text: string;
   /** Number of blank lines that separated this block from the previous one. */
   blankLinesBefore: number;
+  /** Offsets in the normalized input, excluding the final line ending. */
+  start: number;
+  end: number;
+  /** Original separators between this block's lines. */
+  lineEndings: string[];
 }
 
 export interface CleanOptions {
+  rules?: RuleOverrides;
   /** Keep per-block explanations in the result instead of discarding them. */
   explain?: boolean;
 }
@@ -63,6 +71,7 @@ export interface BlockReport {
 }
 
 export interface CleanResult {
+  rules: Rules;
   /** The final cleaned text. */
   text: string;
   /** One entry per block, in order. Useful for `--explain`. */

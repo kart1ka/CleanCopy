@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { clean, RULE_IDS } from '../src/engine';
 import {
   configFilePath,
   DEFAULT_CONFIG,
@@ -64,6 +65,41 @@ describe('normalizeHotkey', () => {
 });
 
 describe('loadConfig / saveConfig', () => {
+  it('loads explicit false values per rule and defaults missing rules', () => {
+    writeFileSync(configFilePath(), JSON.stringify({ rules: { removeSharedMargin: false } }));
+    const { config, warnings } = loadConfig();
+    expect(warnings).toEqual([]);
+    expect(clean('  word  \r\n', { rules: config.rules })).toBe('  word\n');
+    saveConfig(config);
+    expect(loadConfig().config.rules.removeSharedMargin).toBe(false);
+    expect(Object.keys(loadConfig().config.rules).sort()).toEqual([...RULE_IDS].sort());
+  });
+
+  it('warns on unknown names and invalid values without losing valid rules', () => {
+    writeFileSync(configFilePath(), JSON.stringify({
+      rules: { removeSharedMargin: false, reflowProse: 'off', typo: false, protectCode: false },
+    }));
+    const { config, warnings } = loadConfig();
+    expect(config.rules.removeSharedMargin).toBe(false);
+    expect(config.rules.reflowProse).toBe(true);
+    expect(warnings).toEqual([
+      'rules.reflowProse must be a boolean — using default',
+      'unknown rule rules.typo — ignored',
+      'unknown rule rules.protectCode — ignored',
+    ]);
+  });
+
+  it('rejects malformed rule maps and prototype names', () => {
+    for (const rules of [null, [], 'off', 42]) {
+      writeFileSync(configFilePath(), JSON.stringify({ rules }));
+      expect(loadConfig().warnings).toEqual(['rules must be an object — using defaults']);
+      expect(clean('  word  ', { rules: loadConfig().config.rules })).toBe('word');
+    }
+    writeFileSync(configFilePath(), '{"rules":{"__proto__":false,"toString":false,"constructor":false}}');
+    expect(loadConfig().warnings).toHaveLength(3);
+    expect(Object.keys(loadConfig().config.rules).sort()).toEqual([...RULE_IDS].sort());
+  });
+
   it('returns the defaults when no config file exists, without a warning', () => {
     expect(loadConfig()).toEqual({ config: DEFAULT_CONFIG, warnings: [] });
   });
@@ -72,6 +108,7 @@ describe('loadConfig / saveConfig', () => {
     const config = {
       mode: 'manual' as const,
       hotkeys: { revert: null },
+      rules: DEFAULT_CONFIG.rules,
     };
     saveConfig(config);
     expect(loadConfig()).toEqual({ config, warnings: [] });
@@ -80,7 +117,7 @@ describe('loadConfig / saveConfig', () => {
   it('fills in missing fields from the defaults', () => {
     writeFileSync(configFilePath(), JSON.stringify({ mode: 'manual' }));
     expect(loadConfig()).toEqual({
-      config: { mode: 'manual', hotkeys: DEFAULT_CONFIG.hotkeys },
+      config: { ...DEFAULT_CONFIG, mode: 'manual' },
       warnings: [],
     });
   });

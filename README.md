@@ -110,11 +110,75 @@ pbpaste | cleancopy clean | pbcopy
 
 Your clipboard now holds the cleaned version; paste it anywhere.
 
+### Choose formatting rules
+
+The watcher and `cleancopy clean` use the same settings. List every formatting
+rule and its current value, or change one:
+
+```bash
+cleancopy config rules
+cleancopy config rule removeSharedMargin off
+cleancopy config rule reflowProse off
+cleancopy config rule reflowLists on
+```
+
+All rules are enabled by default. These switches cover every operation that
+changes text:
+
+| Rule | Effect when enabled |
+| --- | --- |
+| `normalizeLineEndings` | Convert CRLF and CR line endings to LF. |
+| `stripAnsi` | Remove terminal escape sequences. |
+| `removeInvisibleCharacters` | Remove zero-width spaces, word joiners, and BOMs. Keep ZWJ and ZWNJ. |
+| `normalizeSpaces` | Convert unusual Unicode spaces to ordinary spaces. |
+| `trimTrailingWhitespace` | Remove whitespace at line ends. |
+| `removeSharedMargin` | Remove shared indentation, preserving list nesting. |
+| `reflowProse` | Join detected soft wraps in paragraphs. |
+| `reflowLists` | Join detected soft wraps within list items. |
+| `collapseProseSpaces` | Collapse repeated internal spaces in eligible prose and lists. |
+| `trimOuterBlankLines` | Remove outer blank lines, keeping one final line ending if present. |
+
+Code, table, log, and uncertain-content protections remain mandatory. They
+prevent prose reformatting; enabled global normalization rules can still
+change whitespace or remove terminal escapes in these blocks.
+
+Space cleanup and margin removal work independently of wrap repair. Joining
+a wrap replaces the removed line break and adjacent whitespace with one space.
+To retain original continuation indentation, disable the corresponding reflow
+rule as well as margin removal.
+
+Disable every formatting operation to preserve input exactly, or restore all
+formatting rules:
+
+```bash
+cleancopy config rules off
+cleancopy config rules on
+```
+
+Settings live in `~/.cleancopy/config.json`, or the directory specified by
+`CLEANCOPY_STATE_DIR`. Configuration commands save every rule and restart a
+running watcher. Hand-edited files may specify only the rules you want to
+change; omitted rules use their defaults. Use JSON booleans, such as
+`"reflowProse": false`. A hand edit requires a watcher restart.
+
+Override rules for one pipe command without changing saved settings:
+
+```bash
+cleancopy clean --disable-rule reflowProse < copied.txt
+cleancopy clean --enable-rule removeSharedMargin --disable-rule reflowLists < copied.txt
+cleancopy clean --no-config < copied.txt
+```
+
+Command-line overrides take precedence over saved settings. `--no-config`
+uses built-in defaults, plus any explicit overrides; it does not disable
+formatting. Unknown names and conflicting overrides are errors. Invalid
+settings in a hand-edited file produce warnings and fall back to defaults.
+
 ### Debugging
 
 `cleancopy run` starts the watcher in the foreground and prints event lines.
 To see why a copy was cleaned the way it was, save it to a file and ask for an
-explanation — the verdict for each block goes to stderr, so the cleaned text on
+explanation — the effective rules and verdict for each block go to stderr, so the cleaned text on
 stdout stays pipeable:
 
 ```bash

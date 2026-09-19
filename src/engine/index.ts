@@ -1,31 +1,34 @@
 import { normalize, stripRenderMargin } from './normalize';
 import { segment } from './segment';
 import { classify, forcedVerbatim, looksLikeTranscript } from './classify';
-import { transform, inferWrapWidth, shouldReflow } from './transform';
+import { transform, inferWrapWidth, isReflowEnabled } from './transform';
+import { resolveRules, type Rules } from './rules';
 import type { BlockReport, CleanOptions, CleanResult, JoinReport } from './types';
 
 export * from './types';
+export { RULES, RULE_IDS, isRuleId, resolveRules } from './rules';
+export type { RuleId, Rules, RuleOverrides } from './rules';
 export { normalize, stripCommonMargin } from './normalize';
 export { segment } from './segment';
 export { classify } from './classify';
-export { transform, inferWrapWidth, REFLOW_THRESHOLD, shouldReflow } from './transform';
+export { transform, inferWrapWidth, REFLOW_THRESHOLD, shouldReflow, isReflowEnabled } from './transform';
 export type { TransformContext } from './transform';
 
 /**
  * Clean a piece of copied text. Pure: text in, text out, no side effects.
  *
  * Pipeline:
- *   1. normalize  — always-safe tidy-ups on the whole text
+ *   1. normalize  — configured tidy-ups on the whole text
  *   2. segment    — split into blocks at blank lines
  *   3. classify   — judge each block (prose? code? list? …)
  *   4. transform  — tidy each block according to what it is
  * then the blocks are stitched back together with their original internal
  * blank-line separators.
  *
- * Golden rule: when unsure, a block is left exactly as it was.
+ * Golden rule: when unsure, a normalized block is not reflowed.
  */
-export function clean(input: string): string {
-  return cleanWithReport(input).text;
+export function clean(input: string, options: CleanOptions = {}): string {
+  return cleanWithReport(input, options).text;
 }
 
 /**
@@ -38,30 +41,27 @@ export function clean(input: string): string {
  * which also makes clean() idempotent by construction rather than by hope.
  */
 export function cleanWithReport(input: string, options: CleanOptions = {}): CleanResult {
-  const first = runPipeline(input, options);
-  if (runPipeline(first.text, {}).text === first.text) return first;
-  return runPipeline(input, options, true);
+  const rules = resolveRules(options.rules);
+  const first = runPipeline(input, rules, options.explain);
+  if (runPipeline(first.text, rules).text === first.text) return first;
+  return runPipeline(input, rules, options.explain, true);
 }
 
 function runPipeline(
   input: string,
-  options: CleanOptions,
+  rules: Rules,
+  explain = false,
   forceVerbatim = false,
 ): CleanResult {
-  const normalized = normalize(input);
-  // The trailing-newline contract lives here, not in each caller: the output
-  // ends with a single newline exactly when the input did, so cleaning never
-  // churns a final newline and every consumer (watcher, CLI) sees the same
-  // bytes for the same text.
-  const endsWithNewline = normalized.endsWith('\n');
+  const normalized = normalize(input, rules);
   const blocks = segment(normalized);
 
   // Copy-level fences, judged before per-block classification because their
-  // evidence spans blocks: a shell prompt line anywhere makes the whole copy
+  // evidence spans blocks: two shell prompt lines make the whole copy
   // a terminal transcript (all output, no prose to rescue — F21), and a
   // line-start `/*` freezes everything through the closing `*/` even across
   // blank lines, since a bare block comment's interior reads like prose (F20).
-  const transcript = looksLikeTranscript(normalized.split('\n'));
+  const transcript = looksLikeTranscript(normalized.split(/\r\n|\r|\n/));
   // An opener with no closing `*/` anywhere below is a torn or quoted `/*`:
   // it freezes its own block only, never the whole rest of the copy.
   let lastCloser = -1;
@@ -107,15 +107,16 @@ function runPipeline(
   // spurious column that could join deliberate prose breaks near it.
   const inferredWidth = inferWrapWidth(
     blocks
-      .filter((_, i) => shouldReflow(classifications[i]))
+      .filter((_, i) => isReflowEnabled(classifications[i], rules))
       .map((b) => b.text)
       .join('\n'),
   );
 
   const reports: BlockReport[] = blocks.map((block, i) => {
     const classification = classifications[i];
-    const joins: JoinReport[] | undefined = options.explain ? [] : undefined;
+    const joins: JoinReport[] | undefined = explain ? [] : undefined;
     const output = transform(block, classification, {
+      rules,
       docWidth: inferredWidth,
       joins,
       // A later indented list block can be a child list separated from its
@@ -129,22 +130,22 @@ function runPipeline(
     return { block, classification, output, joins };
   });
 
-  // The final stripRenderMargin makes the output a fixed point of normalize:
-  // a join can absorb the only flush-left line (an indented first line
-  // swallowing its block), leaving a margin a second clean() would strip.
-  // Stripping it here — at the whole-output level, with normalize's own
-  // guard — keeps clean() idempotent without flattening the block-local
-  // indent of, say, a quoted paragraph in a larger paste.
-  const stitched = stripRenderMargin(
-    reports
-      .map((r, i) =>
-        i === 0 ? r.output : '\n'.repeat(r.block.blankLinesBefore + 1) + r.output,
-      )
-      .join('')
-      .replace(/[ \t]+$/gm, '') // belt-and-braces trailing trim
-      .replace(/^\n+|\n+$/g, ''), // no leading / trailing blank lines
-  );
-  const text = stitched.length > 0 && endsWithNewline ? stitched + '\n' : stitched;
-
-  return { text, reports, inferredWidth };
+  // Source spans preserve separator contents and mixed line endings even
+  // when normalization is disabled and some block lines have been joined.
+  const chunks: string[] = [];
+  let cursor = 0;
+  for (const report of reports) {
+    chunks.push(rules.trimOuterBlankLines && cursor === 0
+      ? '' : normalized.slice(cursor, report.block.start));
+    chunks.push(report.output);
+    cursor = report.block.end;
+  }
+  const finalEnding = normalized.match(/(?:\r\n|\r|\n)$/)?.[0] ?? '';
+  chunks.push(rules.trimOuterBlankLines
+    ? (reports.length > 0 ? finalEnding : '')
+    : normalized.slice(cursor));
+  let text = chunks.join('');
+  // Joins can expose a new shared margin; apply the same configured rule.
+  if (rules.removeSharedMargin) text = stripRenderMargin(text);
+  return { text, reports, inferredWidth, rules };
 }

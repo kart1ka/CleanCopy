@@ -6,6 +6,7 @@ import {
   type Config,
 } from '../watcher';
 import { runningPid, start, stop } from './daemon';
+import { RULES, RULE_IDS, isRuleId, type Rules } from '../engine/rules';
 
 // `cleancopy config` — read and change the watcher's settings. The settings
 // live in a plain JSON file (configFilePath()), so this command is a
@@ -20,6 +21,9 @@ Usage:
                                             same text twice, quickly)
   cleancopy config hotkey revert <combo>    set the revert-to-original hotkey
   cleancopy config hotkey revert off        disable it
+  cleancopy config rules                    list every formatting rule
+  cleancopy config rule <name> on|off        enable or disable one rule
+  cleancopy config rules on|off              enable or disable all formatting
 
 A combo is modifiers + one key, joined by "+": e.g. "cmd+ctrl+z",
 "cmd+shift+v", "ctrl+opt+f9". At least one modifier is required.
@@ -36,6 +40,15 @@ function show(config: Config): void {
   process.stdout.write(
     `  revert: ${revert}${revert === 'off' ? '' : ' — restores the original of the last cleaned copy'}\n`,
   );
+  showRules(config.rules);
+}
+
+function showRules(rules: Rules): void {
+  process.stdout.write('rules:\n');
+  for (const id of RULE_IDS) {
+    process.stdout.write(`  ${id}: ${rules[id] ? 'on' : 'off'} — ${RULES[id].description}\n`);
+  }
+  process.stdout.write('Code, table, log, and uncertain-content protections always apply.\n');
   process.stdout.write(`file:   ${configFilePath()}\n`);
 }
 
@@ -70,6 +83,29 @@ export async function configCommand(args: string[]): Promise<void> {
 
   if (args.length === 0) {
     show(config);
+    return;
+  }
+
+  if (args[0] === 'rules' && args.length === 1) {
+    showRules(config.rules);
+    return;
+  }
+  if (args[0] === 'rule' || args[0] === 'rules') {
+    const all = args[0] === 'rules';
+    const name = args[1] ?? '';
+    if (!all && !isRuleId(name)) fail(`unknown rule: ${name} (see cleancopy config rules)`);
+    const setting = args[all ? 1 : 2];
+    if (args.length !== (all ? 2 : 3) || (setting !== 'on' && setting !== 'off')) {
+      fail('expected rule <name> on|off, or rules on|off');
+    }
+    const rules = { ...config.rules };
+    if (all) {
+      for (const id of RULE_IDS) rules[id] = setting === 'on';
+    } else if (isRuleId(name)) {
+      rules[name] = setting === 'on';
+    }
+    config.rules = rules;
+    await saveAndReport(config);
     return;
   }
 

@@ -13,28 +13,41 @@ export function segment(text: string): Block[] {
   let current: string[] = [];
   let pendingBlankLines = 0;
   let blankLinesBefore = 0;
+  let start = 0;
+  let end = 0;
+  let lineEndings: string[] = [];
 
   const flush = () => {
     if (current.length > 0) {
-      blocks.push({ lines: current, text: current.join('\n'), blankLinesBefore });
+      blocks.push({
+        lines: current, text: current.join('\n'), blankLinesBefore,
+        start, end, lineEndings: lineEndings.slice(0, -1),
+      });
       current = [];
+      lineEndings = [];
       blankLinesBefore = 0;
     }
   };
 
-  for (const line of text.split('\n')) {
+  const parts = text.split(/(\r\n|\r|\n)/);
+  let offset = 0;
+  for (let i = 0; i < parts.length; i += 2) {
+    const line = parts[i];
+    const ending = parts[i + 1] ?? '';
     if (line.trim() === '') {
       flush();
       pendingBlankLines += 1;
     } else {
       if (current.length === 0) {
-        // Leading blank lines are intentionally discarded. Between blocks,
-        // retain the exact run so stitching can preserve source structure.
+        start = offset;
         blankLinesBefore = blocks.length > 0 ? pendingBlankLines : 0;
         pendingBlankLines = 0;
       }
       current.push(line);
+      lineEndings.push(ending);
+      end = offset + line.length;
     }
+    offset += line.length + ending.length;
   }
   flush();
 

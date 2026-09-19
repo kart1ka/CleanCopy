@@ -9,6 +9,7 @@ import {
 import { decide } from './decide';
 import { extraTerminalsFromEnv, isTerminalApp } from './terminals';
 import type { CleanMode, Hotkeys } from './config';
+import type { RuleOverrides } from '../engine/rules';
 
 // Orchestration: spawn the Swift helper, listen for clipboard events, run
 // each through decide(), and reply with cleaned text or nothing. In manual
@@ -24,6 +25,7 @@ import type { CleanMode, Hotkeys } from './config';
 // this process's memory and only until the clipboard moves on.
 
 export interface WatcherOptions {
+  rules?: RuleOverrides;
   helperPath: string;
   /** Receives one-line event descriptions. Never clipboard contents. */
   log?: (line: string) => void;
@@ -118,7 +120,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
     // copy is simply left as it was (the golden rule, applied to crashes).
     let decision: ReturnType<typeof decide>;
     try {
-      decision = decide(event, extraTerminals);
+      decision = decide(event, { extraTerminals, rules: options.rules });
     } catch (err) {
       log(`engine error, left copy unchanged (${(err as Error).message})`);
       return;

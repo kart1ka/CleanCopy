@@ -1,9 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ensureStateDir, stateDir } from './paths';
+import { isRuleId, resolveRules, type RuleOverrides, type Rules } from '../engine/rules';
 
-// User configuration: how the watcher reacts to a terminal copy, and which
-// global hotkeys it registers. Lives as JSON next to the pid file and log so
+// User configuration: formatting rules, how the watcher reacts to a terminal
+// copy, and its global hotkeys. Lives next to the pid file and log so
 // CLEANCOPY_STATE_DIR relocates all of it together.
 //
 //   ~/.cleancopy/config.json
@@ -29,13 +30,15 @@ export interface Hotkeys {
 }
 
 export interface Config {
-  /** auto: clean every terminal copy as it lands. manual: only on the hotkey. */
+  rules: Rules;
+  /** auto: clean each terminal copy. manual: clean on the double-copy gesture. */
   mode: CleanMode;
   /** Hotkey combos, or null to leave a hotkey unregistered. */
   hotkeys: Hotkeys;
 }
 
 export const DEFAULT_CONFIG: Config = {
+  rules: resolveRules(),
   mode: 'auto',
   hotkeys: { revert: 'cmd+ctrl+z' },
 };
@@ -157,7 +160,7 @@ export function loadConfig(): LoadedConfig {
     }
     return { config: structuredClone(DEFAULT_CONFIG), warnings };
   }
-  if (typeof raw !== 'object' || raw === null) {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     warnings.push(`${configFilePath()} is not a JSON object — using defaults`);
     return { config: structuredClone(DEFAULT_CONFIG), warnings };
   }
@@ -183,6 +186,7 @@ export function loadConfig(): LoadedConfig {
 
   return {
     config: {
+      rules: readRules(record.rules, warnings),
       mode,
       hotkeys: {
         revert: readHotkey(hotkeysRecord.revert, 'revert', DEFAULT_CONFIG.hotkeys.revert, warnings),
@@ -190,6 +194,25 @@ export function loadConfig(): LoadedConfig {
     },
     warnings,
   };
+}
+
+function readRules(value: unknown, warnings: string[]): Rules {
+  const overrides: RuleOverrides = {};
+  if (value === undefined) return resolveRules();
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    warnings.push('rules must be an object — using defaults');
+    return resolveRules();
+  }
+  for (const [name, enabled] of Object.entries(value)) {
+    if (!isRuleId(name)) {
+      warnings.push(`unknown rule rules.${name} — ignored`);
+    } else if (typeof enabled !== 'boolean') {
+      warnings.push(`rules.${name} must be a boolean — using default`);
+    } else {
+      overrides[name] = enabled;
+    }
+  }
+  return resolveRules(overrides);
 }
 
 export function saveConfig(config: Config): void {

@@ -3,6 +3,19 @@
 All notable changes to this project will be documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Settings for all ten formatting operations, shared by the watcher and
+  `cleancopy clean`. Use `config rules` to list them, `config rule <name> on|off`
+  to change one, or `config rules on|off` to change all of them.
+- Per-command `--enable-rule`, `--disable-rule`, and `--no-config` options.
+  Explanations now include effective rule settings.
+- Exact input preservation when all formatting rules are disabled, including
+  mixed line endings and whitespace-only blank lines. Code, table, and log
+  protections remain mandatory.
+
 ## [1.0.2] - 2026-09-11
 
 ### Changed

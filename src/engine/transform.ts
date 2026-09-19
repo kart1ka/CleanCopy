@@ -1,6 +1,7 @@
 import { LIST_ITEM } from './classify';
 import { stripCommonMargin } from './normalize';
 import type { Block, Classification, JoinReport } from './types';
+import { resolveRules, type Rules } from './rules';
 
 // Step 4 of the pipeline: turn a judged block into its cleaned text.
 //
@@ -117,6 +118,7 @@ export function inferWrapWidth(text: string): number | undefined {
 
 /** Document-level context handed down from clean() to each block's transform. */
 export interface TransformContext {
+  rules?: Rules;
   /** The paste-wide wrap column from {@link inferWrapWidth}, when established. */
   docWidth?: number;
   /** When provided, every break decision is recorded here (for `--explain`). */
@@ -125,69 +127,63 @@ export interface TransformContext {
   preserveListIndent?: boolean;
 }
 
+export function isReflowEnabled(c: Classification, rules: Rules): boolean {
+  return shouldReflow(c) &&
+    ((c.type === 'prose' && rules.reflowProse) || (c.type === 'list' && rules.reflowLists));
+}
+
 export function transform(
   block: Block,
   c: Classification,
   ctx: TransformContext = {},
 ): string {
-  if (shouldReflow(c)) {
-    if (c.type === 'list') return reflowList(block.lines, ctx);
-    if (c.type === 'prose') return reflowParagraph(block.lines, ctx);
+  const rules = ctx.rules ?? resolveRules();
+  let lines = block.lines;
+  const serialize = (values: string[]) => values
+    .map((line, i) => line + (block.lineEndings[i] ?? ''))
+    .join('');
+  if (!shouldReflow(c) || (c.type !== 'list' && c.type !== 'prose')) {
+    return serialize(lines);
   }
-  return block.lines.join('\n');
-}
 
-/**
- * Glue wrapped lines back into a paragraph — but only at boundaries that look
- * like soft wraps. The newline itself carries no record of whether it was a
- * width-forced wrap or a deliberate break, so each boundary is judged by
- * accumulating evidence from both sides (see shouldJoin): strong signals score
- * 2, weak ones 1, and the break is only removed when the total reaches
- * JOIN_SCORE. Lead-ins ending in ":"/";", headings, and list items keep their
- * break unconditionally.
- */
-function reflowParagraph(lines: string[], ctx: TransformContext = {}): string {
-  const trimmed = lines.map(l => l.trim());
-  if (trimmed.length === 1) return trimmed[0];
-
-  const width = trimmed.reduce((m, l) => Math.max(m, l.length), 0);
-  const rawMax = demonstratedWidth(lines.map((l) => l.length));
-  // A block whose widest line is under WRAP_MIN cannot be width-wrapped prose —
-  // no real window is that narrow, so every break in it is the author's
-  // (`git branch` output, short assignments, one-command-per-line notes).
-  // Return it byte-for-byte: even the space collapsing below could flatten
-  // alignment inside lines that were never going to be joined.
-  if (width < WRAP_MIN) return lines.join('\n');
-  // One longest line is not evidence of a wrap column: it may have been
-  // created by an earlier cleanup pass. Require the edge to repeat before it
-  // can independently justify removing another break.
+  // List-local margin cleanup remains independent of optional wrap repair.
+  if (c.type === 'list' && rules.removeSharedMargin && !ctx.preserveListIndent) {
+    lines = stripCommonMargin(lines.join('\n')).split('\n');
+  }
+  const trimmed = lines.map((line) => line.trim());
+  const width = trimmed.reduce((max, line) => Math.max(max, line.length), 0);
+  if (width < WRAP_MIN) return serialize(lines);
+  const rawMax = demonstratedWidth(lines.map((line) => line.length));
   const hugging = trimmed.filter((line) => line.length >= width - NEAR_MAX).length;
   const establishedWidth = hugging >= 2 ? width : undefined;
+  const reflow = isReflowEnabled(c, rules);
+  const out = [{ text: lines[0], ending: block.lineEndings[0] ?? '' }];
 
-  const out: string[] = [lines[0]];
-  for (let i = 1; i < trimmed.length; i++) {
-    const prev = trimmed[i - 1];
-    const next = trimmed[i];
-    // The veto judges the line as accumulated so far (out's tail), not the
-    // original fragment: joins lengthen prev, and judging both passes against
-    // the same geometry is what keeps clean() idempotent.
-    const verdict = judgeBreak(
-      prev, next, establishedWidth, ctx.docWidth, rawMax,
-      out[out.length - 1].length, trimmed.length === 2,
-    );
-    ctx.joins?.push({ line: i - 1, ...verdict });
-    if (verdict.joined) {
-      out[out.length - 1] += ' ' + next; // soft wrap — glue the trimmed text
-    } else {
-      out.push(lines[i]); // deliberate break — keep the line and its indent
+  for (let i = 1; i < lines.length; i++) {
+    const tail = out[out.length - 1];
+    const ending = block.lineEndings[i] ?? '';
+    if (reflow && !(c.type === 'list' && LIST_ITEM.test(lines[i]))) {
+      const verdict = judgeBreak(
+        trimmed[i - 1], trimmed[i], establishedWidth, ctx.docWidth, rawMax,
+        tail.text.length, lines.length === 2,
+      );
+      ctx.joins?.push({ line: i - 1, ...verdict });
+      if (verdict.joined) {
+        // Whitespace at a removed wrap becomes one space. The trailing
+        // whitespace and line ending of the surviving line stay independent.
+        tail.text = tail.text.trimEnd() + ' ' + lines[i].trimStart();
+        tail.ending = ending;
+        continue;
+      }
     }
+    out.push({ text: lines[i], ending });
   }
-  // Collapse runs of spaces, but only after the first non-space character so
-  // a kept line's leading indent (e.g. an indented attribution) survives.
-  // Any margin the joins leave behind (an indented first line swallowing its
-  // whole block) is stripped once at the stitched-output level in clean(),
-  // never per block — a block-local indent can be a deliberate quote.
-  return out.map(l => l.replace(/(\S) {2,}/g, '$1 ').trimEnd()).join('\n');
+
+  return out.map(({ text, ending }) => {
+    if (rules.collapseProseSpaces) text = text.replace(/(\S) {2,}(?=\S)/g, '$1 ');
+    if (rules.trimTrailingWhitespace) text = text.trimEnd();
+    return text + ending;
+  }).join('');
 }
 
 /** Decide whether the break between prev and next was a soft wrap. */
@@ -316,52 +312,4 @@ function hasUnclosedOpener(line: string): boolean {
     else if (ch === ')' || ch === ']' || ch === '}') depth = Math.max(0, depth - 1);
   }
   return depth > 0;
-}
-
-/**
- * Glue each item's wrapped lines together; keep items on their own lines.
- * A continuation line is only glued when the break before it scores as a soft
- * wrap (same evidence as paragraphs) — a deliberate sub-line, e.g. one that
- * follows an item ending in ":", stays on its own line.
- */
-function reflowList(lines: string[], ctx: TransformContext = {}): string {
-  // A list block can sit indented as a whole, relative to the prose around it.
-  // Usually that is copied render margin and can be removed. When it follows
-  // another list block, though, the same indent can express a child list split
-  // off by a blank line, so keep it intact.
-  const block = ctx.preserveListIndent
-    ? lines
-    : stripCommonMargin(lines.join('\n')).split('\n');
-  const width = block.reduce((m, l) => Math.max(m, l.trim().length), 0);
-  const rawMax = demonstratedWidth(block.map((l) => l.length));
-  // Same narrow-block gate as reflowParagraph: items this short were never
-  // wrapped, so there is nothing to rejoin and no space run worth collapsing.
-  if (width < WRAP_MIN) return block.join('\n');
-  const hugging = block.filter((line) => line.trim().length >= width - NEAR_MAX).length;
-  const establishedWidth = hugging >= 2 ? width : undefined;
-  const out: string[] = [];
-
-  for (let i = 0; i < block.length; i++) {
-    const line = block[i];
-    if (LIST_ITEM.test(line) || out.length === 0) {
-      out.push(line); // new item — keep its nesting indent
-      continue;
-    }
-    const prev = block[i - 1].trim();
-    const next = line.trim();
-    const verdict = judgeBreak(
-      prev, next, establishedWidth, ctx.docWidth, rawMax,
-      out[out.length - 1].length, block.length === 2,
-    );
-    ctx.joins?.push({ line: i - 1, ...verdict });
-    if (verdict.joined) {
-      out[out.length - 1] += ' ' + next; // wrapped continuation
-    } else {
-      out.push(line); // deliberate sub-line — keep the break and its indent
-    }
-  }
-
-  // Collapse runs of spaces, but only after the first non-space character so a
-  // kept sub-line's leading indent survives.
-  return out.map(i => i.replace(/(\S) {2,}/g, '$1 ').trimEnd()).join('\n');
 }

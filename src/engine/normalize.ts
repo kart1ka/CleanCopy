@@ -1,9 +1,7 @@
 import { LIST_ITEM } from './classify';
+import { resolveRules, type Rules } from './rules';
 
-// Step 1 of the pipeline: the always-safe tidy-ups.
-//
-// These run on EVERY copy, no judgement required, and never change the meaning
-// of code, tables, or anything else. They only remove junk that is never wanted.
+// Configured normalization runs before content classification.
 //
 // The regexes are built from \u escape strings (pure ASCII) on purpose: writing
 // the invisible characters literally into the source is fragile and easy to
@@ -34,37 +32,29 @@ const EXOTIC_SPACES = new RegExp('[\\u00A0\\u1680\\u2000-\\u200A\\u202F\\u205F\\
 const ANSI = new RegExp(
   '\\u001B(?:' +
     '\\[[0-9;?]*[ -\\/]*[@-~]' + // CSI
-    '|\\][0-9;][^\\u0007\\u001B\\n]*(?:\\u0007|\\u001B\\\\)?' + // OSC
-    '|\\][^\\u0007\\u001B\\n]*(?:\\u0007|\\u001B\\\\)' + // OSC, terminated
+    '|\\][0-9;][^\\u0007\\u001B\\r\\n]*(?:\\u0007|\\u001B\\\\)?' + // OSC
+    '|\\][^\\u0007\\u001B\\r\\n]*(?:\\u0007|\\u001B\\\\)' + // OSC, terminated
     '|[ -\\/]*[0-~]' + // short escape sequences
     '|' + // bare ESC that fits no sequence
     ')',
   'g',
 );
 
-export function normalize(input: string): string {
+/** Map line contents without changing their original separators. */
+function mapLines(text: string, map: (line: string) => string): string {
+  return text.replace(/[^\r\n]+/g, map);
+}
+
+export function normalize(input: string, rules: Rules = resolveRules()): string {
   let text = input;
-
-  // 1. One kind of line ending.
-  text = text.replace(/\r\n?/g, '\n');
-
-  // 2. Strip terminal colour / formatting codes if any slipped through.
-  text = text.replace(ANSI, '');
-
-  // 3. Remove invisible characters; turn odd spaces into plain spaces.
-  text = text.replace(ZERO_WIDTH, '');
-  text = text.replace(EXOTIC_SPACES, ' ');
-
-  // 4. Trim whitespace hanging off the end of each line.
-  text = text
-    .split('\n')
-    .map((line) => line.replace(/[ \t]+$/, ''))
-    .join('\n');
-
-  // 5. Slide everything back to the left edge: remove the indentation that
-  //    EVERY non-blank line shares (the terminal / Claude render margin).
-  text = stripRenderMargin(text);
-
+  if (rules.normalizeLineEndings) text = text.replace(/\r\n?/g, '\n');
+  if (rules.stripAnsi) text = text.replace(ANSI, '');
+  if (rules.removeInvisibleCharacters) text = text.replace(ZERO_WIDTH, '');
+  if (rules.normalizeSpaces) text = text.replace(EXOTIC_SPACES, ' ');
+  if (rules.trimTrailingWhitespace) {
+    text = mapLines(text, (line) => line.replace(/[ \t]+$/, ''));
+  }
+  if (rules.removeSharedMargin) text = stripRenderMargin(text);
   return text;
 }
 
@@ -81,7 +71,7 @@ export function stripRenderMargin(text: string): string {
 }
 
 function isIndentedListFragment(text: string): boolean {
-  const lines = text.split('\n').filter((line) => line.trim() !== '');
+  const lines = text.split(/\r\n|\r|\n/).filter((line) => line.trim() !== '');
   if (lines.length === 0 || !LIST_ITEM.test(lines[0])) return false;
 
   const firstIndent = lines[0].match(/^[ \t]*/)?.[0] ?? '';
@@ -106,7 +96,7 @@ function isIndentedListFragment(text: string): boolean {
  * another space-indented) share no prefix, so nothing is stripped.
  */
 export function stripCommonMargin(text: string): string {
-  const lines = text.split('\n');
+  const lines = text.split(/\r\n|\r|\n/);
 
   let margin: string | null = null;
   for (const line of lines) {
@@ -124,5 +114,5 @@ export function stripCommonMargin(text: string): string {
 
   if (!margin) return text;
   const width = margin.length;
-  return lines.map((line) => (line.trim() === '' ? line : line.slice(width))).join('\n');
+  return mapLines(text, (line) => line.trim() === '' ? line : line.slice(width));
 }

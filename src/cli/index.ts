@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import * as fs from 'fs';
 import * as path from 'path';
-import { cleanWithReport } from '../engine';
+import { cleanWithReport, isReflowEnabled, isRuleId, RULE_IDS, type RuleOverrides } from '../engine';
+import { DEFAULT_CONFIG, loadConfig } from '../watcher/config';
 import { configCommand } from './config';
 import { autostart, runForeground, start, status, stop } from './daemon';
 import { doctor, requiredNodeMajor } from './doctor';
@@ -13,7 +14,7 @@ import { doctor, requiredNodeMajor } from './doctor';
 const HELP = `cleancopy — clean up text copied from the terminal
 
 Usage:
-  cleancopy clean [--explain]    read text from stdin, print the cleaned text
+  cleancopy clean [options]      read text from stdin, print the cleaned text
   cleancopy start                start watching the clipboard (background)
   cleancopy stop                 stop the background watcher
   cleancopy stop --disable-autostart
@@ -32,8 +33,14 @@ Examples:
 
 --explain prints, per block, what it was judged to be and why (to stderr),
 so the cleaned text on stdout stays pipeable.
+--enable-rule <name> and --disable-rule <name> override saved settings for
+this clean only. Repeat for multiple rules. --no-config uses built-in defaults
+instead of saved settings. It does not disable formatting.
 
 Settings (cleancopy config …):
+  rules                          list every formatting rule and its setting
+  rule <name> on|off              enable or disable a formatting rule
+  rules on|off                    enable or disable all formatting rules
   mode auto|manual               auto (default) cleans every terminal copy;
                                  manual cleans only on double-copy — copy the
                                  same text twice, quickly (cmd+c cmd+c)
@@ -93,6 +100,34 @@ export function parseStopArgs(args: string[]): { disableAutostart: boolean } {
  */
 export function findUnknownArg(args: string[], allowed: string[] = []): string | undefined {
   return args.find((arg) => !allowed.includes(arg));
+}
+
+export function parseCleanArgs(args: string[]): {
+  explain: boolean;
+  noConfig: boolean;
+  rules: RuleOverrides;
+} {
+  const rules: RuleOverrides = {};
+  const options = { explain: false, noConfig: false, rules };
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--explain') options.explain = true;
+    else if (arg === '--no-config') options.noConfig = true;
+    else if (arg === '--enable-rule' || arg === '--disable-rule') {
+      const name = args[++i];
+      if (!name || !isRuleId(name)) {
+        throw new Error(`Unknown or missing rule: ${name ?? ''} (see cleancopy config rules)`);
+      }
+      const enabled = arg === '--enable-rule';
+      if (options.rules[name] !== undefined && options.rules[name] !== enabled) {
+        throw new Error(`Conflicting overrides for rule: ${name}`);
+      }
+      options.rules[name] = enabled;
+    } else {
+      throw new Error(`Unknown clean option: ${arg}`);
+    }
+  }
+  return options;
 }
 
 function readStdin(): Promise<string> {
@@ -165,19 +200,33 @@ export async function main(): Promise<void> {
   }
 
   if (command === 'clean') {
-    if (rejectUnknown('clean', args.slice(1), ['--explain'])) return;
-    const explain = args.includes('--explain');
+    let options: ReturnType<typeof parseCleanArgs>;
+    try {
+      options = parseCleanArgs(args.slice(1));
+    } catch (err) {
+      process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n\n${HELP}`);
+      process.exitCode = 1;
+      return;
+    }
+    const { explain } = options;
+    const { config, warnings } = options.noConfig
+      ? { config: DEFAULT_CONFIG, warnings: [] }
+      : loadConfig();
+    for (const warning of warnings) process.stderr.write(`warning: ${warning}\n`);
     const input = await readStdin();
-    const { text, reports, inferredWidth } = cleanWithReport(input, { explain });
+    const { text, reports, inferredWidth, rules } = cleanWithReport(input, {
+      explain, rules: { ...config.rules, ...options.rules },
+    });
 
     if (explain) {
+      process.stderr.write(`rules: ${RULE_IDS.map((id) => `${id}=${rules[id] ? 'on' : 'off'}`).join(', ')}\n`);
       process.stderr.write(`inferred wrap column: ${inferredWidth ?? 'none established'}\n`);
       for (const r of reports) {
         const head = r.block.lines[0] ?? '';
         const preview = head.slice(0, 50) + (head.length > 50 ? '…' : '');
         const c = r.classification;
         process.stderr.write(
-          `[${c.type}] reflow=${c.reflowable} conf=${c.confidence} ` +
+          `[${c.type}] reflow=${isReflowEnabled(c, rules)} conf=${c.confidence} ` +
             `(${c.signals.join(', ')})  "${preview}"\n`,
         );
         for (const j of r.joins ?? []) {
