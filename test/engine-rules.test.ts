@@ -103,6 +103,23 @@ describe('independent formatting rules', () => {
     expect(clean(input, { rules: { ...off, reflowProse: true } })).toBe(input);
   });
 
+  it.each(['\n', '\r\n', '\r'])('preserves padded exception messages with %j separators', (ending) => {
+    const input = [
+      'com.acme.billing.InvoiceNotFoundException   ',
+      'while loading the customer profile from the shared cache   ',
+      'before the retry budget for that request was exhausted   ',
+      '',
+    ].join(ending);
+    for (const rules of [
+      { trimTrailingWhitespace: false, normalizeLineEndings: false },
+      { ...off, reflowProse: true },
+    ]) {
+      const result = cleanWithReport(input, { rules });
+      expect(result.text).toBe(input);
+      expect(result.reports[0].classification.type).toBe('trace');
+    }
+  });
+
   it('keeps continuation indentation when reflow is disabled, but joins without it when enabled', () => {
     const input = '  The quick brown fox jumped clear over\n    the lazy dog down by the river';
     expect(clean(input, { rules: { ...off, reflowProse: true } })).toBe('  ' + joinedParagraph);
