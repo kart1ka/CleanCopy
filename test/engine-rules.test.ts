@@ -65,6 +65,44 @@ describe('independent formatting rules', () => {
     );
   });
 
+  it.each([
+    [3, 3, 3],
+    [3, 30, 3],
+    [3, 3, 30],
+    [30, 3, 3],
+  ])('reflows padded prose and lists with padding %i/%i/%i', (first, second, last) => {
+    const input = 'The quick brown fox jumped over fences' + ' '.repeat(first) + '\r\n' +
+      'beside the quiet river near our village' + ' '.repeat(second) + '\r\n' +
+      'while we watched the boats pass slowly.' + ' '.repeat(last);
+    const expected = 'The quick brown fox jumped over fences beside the quiet river near our village while we watched the boats pass slowly.' + ' '.repeat(last);
+    for (const rules of [{ trimTrailingWhitespace: false }, { ...off, reflowProse: true }]) {
+      expect(clean(input, { rules })).toBe(expected);
+      expect(clean(expected, { rules })).toBe(expected);
+    }
+    const list = '- ' + input.replaceAll('\r\n', '\r\n  ');
+    expect(clean(list, { rules: { ...off, reflowLists: true } })).toBe('- ' + expected);
+    expect(clean(input, { rules: off })).toBe(input);
+  });
+
+  it.each([
+    'First column   second column\nAnother row    another value',
+    'First column  second column  third column\nAnother row  another value  last value',
+    'The quick brown fox jumped over fences\t\nbeside the quiet river near our village\t',
+    'const first = 1;\nconst second = 2;',
+    'ERROR failed to connect to the remote server\nWARN retrying the connection in five seconds',
+  ])('preserves padded protected content: %j', (text) => {
+    const input = text.replaceAll('\n', '   \r\n') + '   ';
+    expect(clean(input, {
+      rules: { ...off, reflowProse: true, reflowLists: true, collapseProseSpaces: true },
+    })).toBe(input);
+  });
+
+  it('does not let trailing padding turn a deliberate break into a wrap', () => {
+    const input = 'The task completed successfully.' + ' '.repeat(30) + '\r\n' +
+      'another operation is still running in the background   ';
+    expect(clean(input, { rules: { ...off, reflowProse: true } })).toBe(input);
+  });
+
   it('keeps continuation indentation when reflow is disabled, but joins without it when enabled', () => {
     const input = '  The quick brown fox jumped clear over\n    the lazy dog down by the river';
     expect(clean(input, { rules: { ...off, reflowProse: true } })).toBe('  ' + joinedParagraph);

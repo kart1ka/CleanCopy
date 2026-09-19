@@ -218,7 +218,7 @@ function looksLikeTable(lines: string[]): boolean {
   // lines with 2+ internal runs of 2+ spaces, i.e. three or more columns.
   // Normal prose has single spaces between words, so it won't match.
   const columnar = lines.filter((l) => {
-    const body = l.replace(/^\s+/, ''); // ignore leading indentation
+    const body = l.trim(); // ignore indentation and trailing padding
     return (body.match(/ {2,}/g)?.length ?? 0) >= 2;
   }).length;
   if (columnar >= 2) return true;
@@ -227,7 +227,7 @@ function looksLikeTable(lines: string[]): boolean {
   // wide alignment gap of 3+ spaces. Three, not two: typists put exactly two
   // spaces after a sentence, so requiring a third keeps double-spaced prose
   // reflowable while still catching printf-%-aligned columns.
-  const twoColumn = lines.filter((l) => / {3,}/.test(l.replace(/^\s+/, ''))).length;
+  const twoColumn = lines.filter((l) => / {3,}/.test(l.trim())).length;
   return twoColumn >= 2;
 }
 
@@ -339,9 +339,9 @@ function proseConfidence(lines: string[]): number {
   if (lines.length < 2) return 0.5;
   // reduce, not Math.max(...spread): a block can run to 100k+ lines, and that
   // many spread arguments overflow the call stack.
-  const max = lines.reduce((m, l) => Math.max(m, l.length), 0);
+  const max = lines.reduce((m, l) => Math.max(m, l.trimEnd().length), 0);
   const inner = lines.slice(0, -1);
-  const tight = inner.every((l) => l.length >= max - 15);
+  const tight = inner.every((l) => l.trimEnd().length >= max - 15);
   const noStops = inner.every((l) => !/[.!?]$/.test(l.trim()));
   return tight && noStops ? 0.9 : 0.7;
 }

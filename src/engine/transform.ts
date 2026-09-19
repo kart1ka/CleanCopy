@@ -153,7 +153,7 @@ export function transform(
   const trimmed = lines.map((line) => line.trim());
   const width = trimmed.reduce((max, line) => Math.max(max, line.length), 0);
   if (width < WRAP_MIN) return serialize(lines);
-  const rawMax = demonstratedWidth(lines.map((line) => line.length));
+  const rawMax = demonstratedWidth(lines.map((line) => line.trimEnd().length));
   const hugging = trimmed.filter((line) => line.length >= width - NEAR_MAX).length;
   const establishedWidth = hugging >= 2 ? width : undefined;
   const reflow = isReflowEnabled(c, rules);
@@ -165,7 +165,7 @@ export function transform(
     if (reflow && !(c.type === 'list' && LIST_ITEM.test(lines[i]))) {
       const verdict = judgeBreak(
         trimmed[i - 1], trimmed[i], establishedWidth, ctx.docWidth, rawMax,
-        tail.text.length, lines.length === 2,
+        tail.text.trimEnd().length, lines.length === 2,
       );
       ctx.joins?.push({ line: i - 1, ...verdict });
       if (verdict.joined) {
@@ -286,7 +286,7 @@ function judgeBreak(
 
 /**
  * The block's demonstrated wrap width for the forced-break veto, from raw
- * (indent-included) line lengths: window fit is about columns. Normally the
+ * (indent-included, padding-excluded) line lengths. Normally the
  * longest line — but a lone outlier (a Ghostty-rejoined soft wrap, a pasted
  * URL) is not the window edge when the remaining lines hug a real wrap edge
  * of their own; then that edge is the width. A two-line block can never
