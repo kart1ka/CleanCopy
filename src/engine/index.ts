@@ -140,7 +140,7 @@ function runPipeline(
     chunks.push(report.output);
     cursor = report.block.end;
   }
-  const finalEnding = normalized.match(/(?:\r\n|\r|\n)$/)?.[0] ?? '';
+  const finalEnding = normalized.slice(cursor).match(/^(?:\r\n|\r|\n)/)?.[0] ?? '';
   chunks.push(rules.trimOuterBlankLines
     ? (reports.length > 0 ? finalEnding : '')
     : normalized.slice(cursor));

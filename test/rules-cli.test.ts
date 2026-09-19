@@ -75,6 +75,16 @@ describe('formatting configuration through the CLI', () => {
     expect(result.stderr).toContain('[prose] reflow=false');
   });
 
+  it('reports usage for missing rule arguments without writing settings', () => {
+    for (const args of [['config', 'rule'], ['config', 'rule', 'reflowProse']]) {
+      const result = run(args);
+      expect(result.status).toBe(1);
+      expect(result.stderr.split('\n')[0]).toBe('expected rule <name> on|off, or rules on|off');
+      expect(result.stdout).toBe('');
+      expect(existsSync(join(dir, 'config.json'))).toBe(false);
+    }
+  });
+
   it('rejects bad setters and overrides without changing settings or producing text', () => {
     writeFileSync(join(dir, 'config.json'), '{}\n');
     for (const args of [

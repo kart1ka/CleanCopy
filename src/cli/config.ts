@@ -93,11 +93,11 @@ export async function configCommand(args: string[]): Promise<void> {
   if (args[0] === 'rule' || args[0] === 'rules') {
     const all = args[0] === 'rules';
     const name = args[1] ?? '';
-    if (!all && !isRuleId(name)) fail(`unknown rule: ${name} (see cleancopy config rules)`);
     const setting = args[all ? 1 : 2];
     if (args.length !== (all ? 2 : 3) || (setting !== 'on' && setting !== 'off')) {
       fail('expected rule <name> on|off, or rules on|off');
     }
+    if (!all && !isRuleId(name)) fail(`unknown rule: ${name} (see cleancopy config rules)`);
     const rules = { ...config.rules };
     if (all) {
       for (const id of RULE_IDS) rules[id] = setting === 'on';

@@ -30,8 +30,6 @@ export interface Block {
   lines: string[];
   /** The block's text — `lines` joined by "\n". */
   text: string;
-  /** Number of blank lines that separated this block from the previous one. */
-  blankLinesBefore: number;
   /** Offsets in the normalized input, excluding the final line ending. */
   start: number;
   end: number;

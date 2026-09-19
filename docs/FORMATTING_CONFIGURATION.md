@@ -66,7 +66,7 @@ Previously, segmentation kept only line contents and blank-line counts. That cou
 
 [Segmentation](../src/engine/segment.ts) recognizes LF, CRLF, and CR without changing them. Classification uses canonical LF between line contents. Transformation retains the separator belonging to each surviving line. Assembly copies untouched inter-block separators directly from normalized input using block offsets.
 
-Consequently, all rules disabled is an exact identity operation, including whitespace-only input, mixed line endings, terminal escapes, and multiple final newlines. No special bypass is needed. `trimOuterBlankLines` controls outer separators and final-newline multiplicity. With that rule enabled, nonempty output retains one final separator if the normalized input ended with one.
+Consequently, all rules disabled is an exact identity operation, including whitespace-only input, mixed line endings, terminal escapes, and multiple final newlines. No special bypass is needed. `trimOuterBlankLines` controls outer separators and final-newline multiplicity. With that rule enabled, nonempty output retains the separator immediately after the last content line, if present. Separators belonging to discarded blank lines cannot replace it.
 
 ## Independent transformations
 

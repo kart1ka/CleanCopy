@@ -29,6 +29,18 @@ const isolated: Array<{ rule: RuleId; input: string; expected: string }> = [
 ];
 
 describe('independent formatting rules', () => {
+  it.each([
+    ['foo\n   ', 'foo\n'],
+    ['a\r\n\n', 'a\r\n'],
+    ['a\n\r\n', 'a\n'],
+    ['a\r \t', 'a\r'],
+  ])('retains the last content line ending when trimming outer blanks: %j', (input, expected) => {
+    const rules = { trimTrailingWhitespace: false, normalizeLineEndings: false };
+    expect(clean(input, { rules })).toBe(expected);
+    expect(clean(expected, { rules })).toBe(expected);
+    expect(clean(input, { rules: { ...rules, trimOuterBlankLines: false } })).toBe(input);
+  });
+
   for (const { rule, input, expected } of isolated) {
     it(`${rule} changes only its own formatting`, () => {
       expect(clean(input, { rules: off })).toBe(input);

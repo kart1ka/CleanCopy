@@ -11,8 +11,6 @@ import type { Block } from './types';
 export function segment(text: string): Block[] {
   const blocks: Block[] = [];
   let current: string[] = [];
-  let pendingBlankLines = 0;
-  let blankLinesBefore = 0;
   let start = 0;
   let end = 0;
   let lineEndings: string[] = [];
@@ -20,12 +18,11 @@ export function segment(text: string): Block[] {
   const flush = () => {
     if (current.length > 0) {
       blocks.push({
-        lines: current, text: current.join('\n'), blankLinesBefore,
+        lines: current, text: current.join('\n'),
         start, end, lineEndings: lineEndings.slice(0, -1),
       });
       current = [];
       lineEndings = [];
-      blankLinesBefore = 0;
     }
   };
 
@@ -36,13 +33,8 @@ export function segment(text: string): Block[] {
     const ending = parts[i + 1] ?? '';
     if (line.trim() === '') {
       flush();
-      pendingBlankLines += 1;
     } else {
-      if (current.length === 0) {
-        start = offset;
-        blankLinesBefore = blocks.length > 0 ? pendingBlankLines : 0;
-        pendingBlankLines = 0;
-      }
+      if (current.length === 0) start = offset;
       current.push(line);
       lineEndings.push(ending);
       end = offset + line.length;
