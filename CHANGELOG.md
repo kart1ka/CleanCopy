@@ -5,6 +5,8 @@ All notable changes to this project will be documented here. The project uses
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-20
+
 ### Added
 
 - Settings for all ten formatting operations, shared by the watcher and
@@ -15,6 +17,11 @@ All notable changes to this project will be documented here. The project uses
 - Exact input preservation when all formatting rules are disabled, including
   mixed line endings and whitespace-only blank lines. Code, table, and log
   protections remain mandatory.
+
+### Fixed
+
+- Local builds preserve the CLI's execute permission, keeping linked
+  `cleancopy` commands runnable after rebuilding.
 
 ## [1.0.2] - 2026-09-11
 
